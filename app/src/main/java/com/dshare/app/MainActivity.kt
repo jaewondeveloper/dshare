@@ -1,10 +1,14 @@
 package com.dshare.app
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +17,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import com.dshare.app.util.ConnectAnimator
 import com.dshare.app.util.applyPressScale
 import com.dshare.app.view.StarfieldView
@@ -48,7 +53,26 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         setContentView(R.layout.activity_main)
         bindViews()
         wireButtons()
+        requestNotificationPermissionIfNeeded()
+        startKeepAliveService()
         startServerAsync()
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
+    }
+
+    private fun startKeepAliveService() {
+        val intent = Intent(this, KeepAliveService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
     private fun bindViews() {
@@ -93,21 +117,21 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
 
     private fun startServerAsync() {
         thread {
-            val ip = NetworkUtils.findLocalIPv4() ?: "0.0.0.0"
-            val srv = LocalShareServer(applicationContext, ip, this)
             try {
+                val ip = NetworkUtils.findLocalIPv4() ?: "0.0.0.0"
+                val srv = LocalShareServer(applicationContext, ip, this)
                 srv.start(30_000, false)
+                server = srv
+                val url = "https://$ip:${srv.listeningPort}"
+                addressUrl = url
+                mainHandler.post {
+                    addressText.text = url
+                    codeText.text = srv.pairingCode
+                    qrImage.setImageBitmap(generateQrBitmap(url))
+                }
             } catch (e: Exception) {
+                android.util.Log.e("DShare", "Server start failed", e)
                 mainHandler.post { Toast.makeText(this, "서버 시작 실패: ${e.message}", Toast.LENGTH_LONG).show() }
-                return@thread
-            }
-            server = srv
-            val url = "https://$ip:${srv.listeningPort}"
-            addressUrl = url
-            mainHandler.post {
-                addressText.text = url
-                codeText.text = srv.pairingCode
-                qrImage.setImageBitmap(generateQrBitmap(url))
             }
         }
     }
@@ -227,5 +251,6 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         super.onDestroy()
         webRtc?.release()
         server?.stop()
+        stopService(Intent(this, KeepAliveService::class.java))
     }
 }
