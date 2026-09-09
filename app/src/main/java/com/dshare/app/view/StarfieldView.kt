@@ -32,8 +32,19 @@ class StarfieldView @JvmOverloads constructor(
     }
 
     private var baseSpeed = 60f
-    private var currentSpeedMultiplier = 1f
+    private var currentSpeedMultiplier = IDLE_MULTIPLIER
     private var speedAnimator: ValueAnimator? = null
+
+    companion object {
+        /** Slow ambient drift while waiting for a connection. */
+        const val IDLE_MULTIPLIER = 0.12f
+
+        /** Calm-but-lively pace once a viewer is connected/streaming. */
+        const val CONNECTED_MULTIPLIER = 1f
+
+        /** Hyperspace burst while a connection is being negotiated. */
+        const val WARP_MULTIPLIER = 14f
+    }
 
     private var lastFrameNanos = 0L
     private var running = false
