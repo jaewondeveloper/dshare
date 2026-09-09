@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_page">
+
+    <!-- ===================== WAITING SCREEN ===================== -->
+    <ScrollView
+        android:id="@+id/waitingScroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/bg_page"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="40dp"
+            android:paddingBottom="32dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textAppearance="@style/Text.Title"
+                android:textSize="28sp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/statusDot"
+                    android:layout_width="9dp"
+                    android:layout_height="9dp"
+                    android:background="@drawable/shape_status_dot" />
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/status_waiting"
+                    android:textAppearance="@style/Text.Body" />
+            </LinearLayout>
+
+            <!-- Address card -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.DShare.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/label_address"
+                        android:textAppearance="@style/Text.Label" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/addressText"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="monospace"
+                            android:textColor="@color/text_primary"
+                            android:textIsSelectable="true"
+                            android:textSize="17sp"
+                            tools:text="https://192.168.0.12:53211" />
+
+                        <ImageButton
+                            android:id="@+id/btnCopy"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/shape_qr_container"
+                            android:contentDescription="@string/action_copy"
+                            android:padding="9dp"
+                            android:src="@drawable/ic_copy" />
+                    </LinearLayout>
+
+                    <FrameLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="18dp"
+                        android:background="@drawable/shape_qr_container"
+                        android:padding="12dp">
+
+                        <ImageView
+                            android:id="@+id/qrImage"
+                            android:layout_width="168dp"
+                            android:layout_height="168dp"
+                            android:contentDescription="@null" />
+                    </FrameLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Pairing code card -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.DShare.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/label_code"
+                        android:textAppearance="@style/Text.Label" />
+
+                    <TextView
+                        android:id="@+id/codeText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/shape_code_chip"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.35"
+                        android:paddingHorizontal="28dp"
+                        android:paddingVertical="12dp"
+                        android:textColor="@color/accent_dark"
+                        android:textSize="34sp"
+                        android:textStyle="bold"
+                        tools:text="482913" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRegenerate"
+                        style="@style/Widget.DShare.Button.Secondary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/action_regenerate"
+                        app:icon="@drawable/ic_refresh"
+                        app:iconGravity="textStart"
+                        app:iconTint="@color/text_secondary" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:text="@string/hint_instructions"
+                android:textAppearance="@style/Text.Body" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- ===================== CONNECTING OVERLAY ===================== -->
+    <FrameLayout
+        android:id="@+id/connectingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/bg_page"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/connectingSpinner"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:indeterminate="true"
+                app:indicatorColor="@color/accent"
+                app:indicatorSize="56dp"
+                app:trackColor="@android:color/transparent"
+                app:trackCornerRadius="24dp"
+                app:trackThickness="5dp" />
+
+            <TextView
+                android:id="@+id/connectingText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/status_connecting"
+                android:textAppearance="@style/Text.Body"
+                android:textSize="16sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ===================== SUCCESS OVERLAY ===================== -->
+    <FrameLayout
+        android:id="@+id/successOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/bg_page"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/successCheck"
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_check_circle" />
+
+            <TextView
+                android:id="@+id/successText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:alpha="0"
+                android:text="@string/status_connected"
+                android:textAppearance="@style/Text.Title"
+                android:textSize="18sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ===================== STREAMING SCREEN ===================== -->
+    <FrameLayout
+        android:id="@+id/streamingContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:visibility="gone">
+
+        <org.webrtc.SurfaceViewRenderer
+            android:id="@+id/surfaceRenderer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ImageButton
+            android:id="@+id/btnStop"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="32dp"
+            android:background="@drawable/shape_fab_stop"
+            android:contentDescription="@string/action_stop"
+            android:padding="16dp"
+            android:src="@drawable/ic_close" />
+    </FrameLayout>
+
+</FrameLayout>

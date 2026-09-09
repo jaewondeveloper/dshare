@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_page">#05060B</color>
+    <color name="surface_card">#12141C</color>
+    <color name="stroke_subtle">#262B38</color>
+
+    <color name="text_primary">#F5F7FA</color>
+    <color name="text_secondary">#9AA3B5</color>
+
+    <color name="accent">#5B8CFF</color>
+    <color name="accent_dark">#8FB0FF</color>
+    <color name="accent_tint">#1A2036</color>
+
+    <color name="status_waiting">#6B7280</color>
+    <color name="status_connecting">#F5A623</color>
+    <color name="status_live">#3ED67C</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="black_overlay">#CC000000</color>
+
+    <color name="star_color">#FFFFFF</color>
+</resources>

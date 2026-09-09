@@ -1,0 +1,9 @@
+.gradle/
+.toolchain/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+.claude/
