@@ -7,12 +7,16 @@
     android:layout_height="match_parent"
     android:background="@color/bg_page">
 
+    <com.dshare.app.view.StarfieldView
+        android:id="@+id/starfield"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <!-- ===================== WAITING SCREEN ===================== -->
     <ScrollView
         android:id="@+id/waitingScroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/bg_page"
         android:clipToPadding="false"
         android:fillViewport="true">
 
@@ -21,21 +25,21 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:gravity="center_horizontal"
-            android:paddingHorizontal="24dp"
-            android:paddingTop="40dp"
-            android:paddingBottom="32dp">
+            android:paddingHorizontal="28dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="20dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/app_name"
                 android:textAppearance="@style/Text.Title"
-                android:textSize="28sp" />
+                android:textSize="24sp" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="6dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -54,126 +58,137 @@
                     android:textAppearance="@style/Text.Body" />
             </LinearLayout>
 
-            <!-- Address card -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.DShare.Card"
+            <!-- Side-by-side cards for landscape -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp">
+                android:layout_marginTop="18dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <!-- Address card -->
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.DShare.Card"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="20dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/label_address"
-                        android:textAppearance="@style/Text.Label" />
+                    android:layout_weight="1">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
+                        android:orientation="vertical"
+                        android:padding="18dp">
 
                         <TextView
-                            android:id="@+id/addressText"
-                            android:layout_width="0dp"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="monospace"
-                            android:textColor="@color/text_primary"
-                            android:textIsSelectable="true"
-                            android:textSize="17sp"
-                            tools:text="https://192.168.0.12:53211" />
+                            android:text="@string/label_address"
+                            android:textAppearance="@style/Text.Label" />
 
-                        <ImageButton
-                            android:id="@+id/btnCopy"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:layout_marginStart="8dp"
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/addressText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:fontFamily="monospace"
+                                android:textColor="@color/text_primary"
+                                android:textIsSelectable="true"
+                                android:textSize="15sp"
+                                tools:text="https://192.168.0.12:53211" />
+
+                            <ImageButton
+                                android:id="@+id/btnCopy"
+                                android:layout_width="36dp"
+                                android:layout_height="36dp"
+                                android:layout_marginStart="8dp"
+                                android:background="@drawable/shape_icon_button_bg"
+                                android:contentDescription="@string/action_copy"
+                                android:padding="8dp"
+                                android:src="@drawable/ic_copy" />
+                        </LinearLayout>
+
+                        <FrameLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_horizontal"
+                            android:layout_marginTop="14dp"
                             android:background="@drawable/shape_qr_container"
-                            android:contentDescription="@string/action_copy"
-                            android:padding="9dp"
-                            android:src="@drawable/ic_copy" />
+                            android:padding="10dp">
+
+                            <ImageView
+                                android:id="@+id/qrImage"
+                                android:layout_width="128dp"
+                                android:layout_height="128dp"
+                                android:contentDescription="@null" />
+                        </FrameLayout>
                     </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                    <FrameLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_horizontal"
-                        android:layout_marginTop="18dp"
-                        android:background="@drawable/shape_qr_container"
-                        android:padding="12dp">
-
-                        <ImageView
-                            android:id="@+id/qrImage"
-                            android:layout_width="168dp"
-                            android:layout_height="168dp"
-                            android:contentDescription="@null" />
-                    </FrameLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Pairing code card -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.DShare.Card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <!-- Pairing code card -->
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.DShare.Card"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical"
-                    android:padding="20dp">
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1">
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/label_code"
-                        android:textAppearance="@style/Text.Label" />
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:padding="18dp">
 
-                    <TextView
-                        android:id="@+id/codeText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:background="@drawable/shape_code_chip"
-                        android:fontFamily="monospace"
-                        android:letterSpacing="0.35"
-                        android:paddingHorizontal="28dp"
-                        android:paddingVertical="12dp"
-                        android:textColor="@color/accent_dark"
-                        android:textSize="34sp"
-                        android:textStyle="bold"
-                        tools:text="482913" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/label_code"
+                            android:textAppearance="@style/Text.Label" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnRegenerate"
-                        style="@style/Widget.DShare.Button.Secondary"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/action_regenerate"
-                        app:icon="@drawable/ic_refresh"
-                        app:iconGravity="textStart"
-                        app:iconTint="@color/text_secondary" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+                        <TextView
+                            android:id="@+id/codeText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/shape_code_chip"
+                            android:fontFamily="monospace"
+                            android:letterSpacing="0.35"
+                            android:paddingHorizontal="24dp"
+                            android:paddingVertical="12dp"
+                            android:textColor="@color/accent_dark"
+                            android:textSize="30sp"
+                            android:textStyle="bold"
+                            tools:text="482913" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:gravity="center"
-                android:text="@string/hint_instructions"
-                android:textAppearance="@style/Text.Body" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnRegenerate"
+                            style="@style/Widget.DShare.Button.Secondary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="@string/action_regenerate"
+                            app:icon="@drawable/ic_refresh"
+                            app:iconGravity="textStart"
+                            app:iconTint="@color/text_secondary" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="18dp"
+                            android:gravity="center"
+                            android:text="@string/hint_instructions"
+                            android:textAppearance="@style/Text.Body"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
@@ -183,7 +198,6 @@
         android:id="@+id/connectingOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/bg_page"
         android:visibility="gone">
 
         <LinearLayout
@@ -211,6 +225,7 @@
                 android:layout_marginTop="20dp"
                 android:text="@string/status_connecting"
                 android:textAppearance="@style/Text.Body"
+                android:textColor="@color/text_primary"
                 android:textSize="16sp" />
         </LinearLayout>
     </FrameLayout>
@@ -220,7 +235,6 @@
         android:id="@+id/successOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/bg_page"
         android:visibility="gone">
 
         <LinearLayout
@@ -245,6 +259,7 @@
                 android:alpha="0"
                 android:text="@string/status_connected"
                 android:textAppearance="@style/Text.Title"
+                android:textColor="@color/text_primary"
                 android:textSize="18sp" />
         </LinearLayout>
     </FrameLayout>
@@ -267,7 +282,7 @@
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="24dp"
             android:background="@drawable/shape_fab_stop"
             android:contentDescription="@string/action_stop"
             android:padding="16dp"

@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.dshare.app.util.ConnectAnimator
 import com.dshare.app.util.applyPressScale
+import com.dshare.app.view.StarfieldView
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import org.webrtc.SurfaceViewRenderer
@@ -35,6 +36,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     private lateinit var successCheck: View
     private lateinit var successText: View
     private lateinit var surfaceRenderer: SurfaceViewRenderer
+    private lateinit var starfield: StarfieldView
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var server: LocalShareServer? = null
@@ -62,6 +64,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         successCheck = findViewById(R.id.successCheck)
         successText = findViewById(R.id.successText)
         surfaceRenderer = findViewById(R.id.surfaceRenderer)
+        starfield = findViewById(R.id.starfield)
     }
 
     private fun wireButtons() {
@@ -183,6 +186,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         connectingOverlay.visibility = View.VISIBLE
         successOverlay.visibility = View.GONE
         streamingContainer.visibility = View.GONE
+        starfield.setWarpMultiplier(14f, 900)
     }
 
     private fun showSuccessThenStream() {
@@ -198,12 +202,14 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                     statusDot.setBackgroundResource(R.drawable.shape_status_dot)
                     statusDot.background.setTint(getColorCompat(R.color.status_live))
                     statusText.text = getString(R.string.status_live)
+                    starfield.setWarpMultiplier(1f, 1200)
                 }, 1000)
             }
         }
     }
 
     private fun stopStreamingAndReturnToWaiting() {
+        starfield.setWarpMultiplier(1f, 500)
         webRtc?.close()
         connectingOverlay.visibility = View.GONE
         successOverlay.visibility = View.GONE
