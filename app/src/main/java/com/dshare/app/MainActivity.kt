@@ -50,12 +50,17 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.util.Log.i("DShare", "onCreate: start")
         setContentView(R.layout.activity_main)
+        android.util.Log.i("DShare", "onCreate: setContentView done")
         bindViews()
+        android.util.Log.i("DShare", "onCreate: bindViews done")
         wireButtons()
-        requestNotificationPermissionIfNeeded()
+        android.util.Log.i("DShare", "onCreate: wireButtons done")
         startKeepAliveService()
+        android.util.Log.i("DShare", "onCreate: keepalive service started")
         startServerAsync()
+        android.util.Log.i("DShare", "onCreate: startServerAsync() called (thread launch requested)")
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -116,11 +121,16 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     }
 
     private fun startServerAsync() {
+        android.util.Log.i("DShare", "startServerAsync: spawning thread")
         thread {
+            android.util.Log.i("DShare", "startServerAsync: thread running")
             try {
                 val ip = NetworkUtils.findLocalIPv4() ?: "0.0.0.0"
+                android.util.Log.i("DShare", "startServerAsync: resolved ip=$ip")
                 val srv = LocalShareServer(applicationContext, ip, this)
+                android.util.Log.i("DShare", "startServerAsync: LocalShareServer constructed")
                 srv.start(30_000, false)
+                android.util.Log.i("DShare", "startServerAsync: server started, port=${srv.listeningPort}")
                 server = srv
                 val url = "https://$ip:${srv.listeningPort}"
                 addressUrl = url
@@ -129,7 +139,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                     codeText.text = srv.pairingCode
                     qrImage.setImageBitmap(generateQrBitmap(url))
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 android.util.Log.e("DShare", "Server start failed", e)
                 mainHandler.post { Toast.makeText(this, "서버 시작 실패: ${e.message}", Toast.LENGTH_LONG).show() }
             }
