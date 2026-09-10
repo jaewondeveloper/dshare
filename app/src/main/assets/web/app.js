@@ -169,17 +169,16 @@
     }
     showOnly(connectingOverlay);
     try {
+      // 1080p60 is the sweet spot for this: visually lossless for screen content, but
+      // realistically encodable in real time on ordinary hardware. Asking for
+      // 1440p/4K "ideal" invites the encoder to fall behind under load, which is what
+      // actually produces visible lag/latency - not the network (LAN has headroom).
+      const videoConstraints = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 } };
       let stream;
       try {
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 2560 }, height: { ideal: 1440 }, frameRate: { ideal: 60 } },
-          audio: true
-        });
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: videoConstraints, audio: true });
       } catch (e) {
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 2560 }, height: { ideal: 1440 }, frameRate: { ideal: 60 } },
-          audio: false
-        });
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: videoConstraints, audio: false });
       }
       localStream = stream;
 
@@ -188,6 +187,21 @@
         track.addEventListener('ended', () => stopShare());
         pc.addTrack(track, stream);
       });
+
+      // Prefer H.264 first: most systems have a hardware H.264 encoder, which keeps
+      // encode time low and steady (avoiding the backlog that causes growing lag)
+      // in a way software VP8/VP9 usually can't match on typical Wi-Fi laptops.
+      const videoTransceiver = pc.getTransceivers().find((t) => t.sender && t.sender.track === stream.getVideoTracks()[0]);
+      if (videoTransceiver && typeof videoTransceiver.setCodecPreferences === 'function' && window.RTCRtpSender && RTCRtpSender.getCapabilities) {
+        try {
+          const caps = RTCRtpSender.getCapabilities('video');
+          if (caps && caps.codecs) {
+            const h264 = caps.codecs.filter((c) => /H264/i.test(c.mimeType));
+            const rest = caps.codecs.filter((c) => !/H264/i.test(c.mimeType));
+            if (h264.length) videoTransceiver.setCodecPreferences([...h264, ...rest]);
+          }
+        } catch (e) { /* best effort - fall back to default codec negotiation */ }
+      }
 
       const videoSender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
       if (videoSender) {
@@ -236,7 +250,7 @@
     void checkCircle.offsetWidth;
     checkCircle.style.animation = '';
     showOnly(successOverlay);
-    setTimeout(() => showOnly(liveOverlay), 1000);
+    setTimeout(() => showOnly(liveOverlay), 150);
   }
 
   function cleanupCall() {

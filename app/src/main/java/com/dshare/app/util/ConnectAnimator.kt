@@ -20,14 +20,14 @@ object ConnectAnimator {
         val overshoot = OvershootInterpolator(6f)
 
         val scaleXUp = ObjectAnimator.ofFloat(checkView, View.SCALE_X, 0f, 1.15f, 1f).apply {
-            duration = 260
+            duration = 160
             interpolator = overshoot
         }
         val scaleYSettle = ObjectAnimator.ofFloat(checkView, View.SCALE_Y, 0f, 0.85f).apply {
-            duration = 130
+            duration = 80
         }
         val scaleYUp = ObjectAnimator.ofFloat(checkView, View.SCALE_Y, 0.85f, 1.15f, 1f).apply {
-            duration = 260
+            duration = 160
             interpolator = overshoot
         }
 
@@ -35,9 +35,9 @@ object ConnectAnimator {
             playTogether(scaleXUp, scaleYSettle)
         }
 
-        val captionFade = ObjectAnimator.ofFloat(captionView, View.ALPHA, 0f, 1f).apply { duration = 220 }
+        val captionFade = ObjectAnimator.ofFloat(captionView, View.ALPHA, 0f, 1f).apply { duration = 140 }
         val captionSlide = ObjectAnimator.ofFloat(captionView, View.TRANSLATION_Y, 24f, 0f).apply {
-            duration = 260
+            duration = 160
             interpolator = OvershootInterpolator(1.5f)
         }
         val captionPhase = AnimatorSet().apply { playTogether(captionFade, captionSlide) }

@@ -224,20 +224,23 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     }
 
     private fun showSuccessThenStream() {
-        ConnectAnimator.crossFade(connectingOverlay, successOverlay)
+        ConnectAnimator.crossFade(connectingOverlay, successOverlay, duration = 180)
         successCheck.post {
             ConnectAnimator.playJellyCheck(successCheck, successText) {
+                // Video has been decoding since onFirstFrameRendered already fired; only
+                // hold briefly so the checkmark registers, then reveal it immediately -
+                // no artificial delay on top of an already-live stream.
                 mainHandler.postDelayed({
                     streamingContainer.alpha = 0f
                     streamingContainer.visibility = View.VISIBLE
-                    streamingContainer.animate().alpha(1f).setDuration(320).withEndAction {
+                    streamingContainer.animate().alpha(1f).setDuration(150).withEndAction {
                         successOverlay.visibility = View.GONE
                     }.start()
                     statusDot.setBackgroundResource(R.drawable.shape_status_dot)
                     statusDot.background.setTint(getColorCompat(R.color.status_live))
                     statusText.text = getString(R.string.status_live)
                     starfield.setWarpMultiplier(StarfieldView.CONNECTED_MULTIPLIER, 1200)
-                }, 1000)
+                }, 150)
             }
         }
     }
