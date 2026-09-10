@@ -10,6 +10,7 @@
 
     <string name="status_waiting_title">연결 대기중</string>
     <string name="status_waiting">같은 Wi-Fi에서 접속을 기다리고 있습니다</string>
+    <string name="status_joined">기기가 연결되었습니다 · 화면 공유를 시작하세요</string>
     <string name="status_connecting">연결하는 중…</string>
     <string name="status_connected">연결되었습니다.</string>
     <string name="status_live">스트리밍 중</string>

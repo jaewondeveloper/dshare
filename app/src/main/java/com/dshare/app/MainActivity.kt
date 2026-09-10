@@ -50,6 +50,8 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     private var redirectServer: RedirectServer? = null
     private var webRtc: WebRtcReceiver? = null
     private var addressUrl: String = ""
+    private var clientJoined = false
+    private lateinit var btnRegenerate: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,7 +105,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
 
     private fun wireButtons() {
         val btnCopy = findViewById<View>(R.id.btnCopy)
-        val btnRegenerate = findViewById<View>(R.id.btnRegenerate)
+        btnRegenerate = findViewById(R.id.btnRegenerate)
 
         listOf(btnCopy, btnRegenerate).forEach { it.applyPressScale() }
 
@@ -116,6 +118,8 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         btnRegenerate.setOnClickListener {
             val newCode = server?.regenerateCode() ?: return@setOnClickListener
             codeText.text = newCode
+            qrImage.setImageBitmap(generateQrBitmap(buildQrUrl(addressUrl, newCode)))
+            AppPrefs.saveCode(applicationContext, newCode)
         }
     }
 
@@ -126,9 +130,12 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
             try {
                 val ip = NetworkUtils.findLocalIPv4(applicationContext) ?: "0.0.0.0"
                 android.util.Log.i("DShare", "startServerAsync: resolved ip=$ip")
-                val srv = LocalShareServer(applicationContext, ip, this)
-                android.util.Log.i("DShare", "startServerAsync: LocalShareServer constructed")
-                srv.start(30_000, false)
+
+                val savedCode = AppPrefs.getSavedCode(applicationContext)
+                val savedHttpsPort = AppPrefs.getSavedHttpsPort(applicationContext)
+                val savedRedirectPort = AppPrefs.getSavedRedirectPort(applicationContext)
+
+                val srv = startHttpsServerWithFallback(ip, savedHttpsPort, savedCode)
                 android.util.Log.i("DShare", "startServerAsync: server started, port=${srv.listeningPort}")
                 server = srv
 
@@ -136,17 +143,19 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                 // socket can't itself answer a plain HTTP request (TLS owns the whole
                 // socket), so typing the address without "https://" - which browsers
                 // resolve to http:// by default - needs this to land anywhere at all.
-                val redirect = RedirectServer(srv.listeningPort)
-                redirect.start(30_000, false)
+                val redirect = startRedirectServerWithFallback(srv.listeningPort, savedRedirectPort)
                 redirectServer = redirect
                 android.util.Log.i("DShare", "startServerAsync: redirect server started, port=${redirect.listeningPort}")
+
+                AppPrefs.saveCode(applicationContext, srv.pairingCode)
+                AppPrefs.savePorts(applicationContext, srv.listeningPort, redirect.listeningPort)
 
                 val url = "http://$ip:${redirect.listeningPort}"
                 addressUrl = url
                 mainHandler.post {
                     addressText.text = url
                     codeText.text = srv.pairingCode
-                    qrImage.setImageBitmap(generateQrBitmap(url))
+                    qrImage.setImageBitmap(generateQrBitmap(buildQrUrl(url, srv.pairingCode)))
                     codeText.visibility = View.VISIBLE
                     qrImage.visibility = View.VISIBLE
                     codeLoadingSpinner.visibility = View.GONE
@@ -158,6 +167,41 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
             }
         }
     }
+
+    /** Tries to reuse the port this device used last time (so a bookmarked/QR link
+     *  keeps working across app restarts); falls back to a fresh ephemeral port if
+     *  that one is no longer available. */
+    private fun startHttpsServerWithFallback(ip: String, preferredPort: Int, savedCode: String?): LocalShareServer {
+        if (preferredPort != 0) {
+            try {
+                val srv = LocalShareServer(applicationContext, ip, this, preferredPort, savedCode)
+                srv.start(30_000, false)
+                return srv
+            } catch (e: Exception) {
+                android.util.Log.i("DShare", "Preferred HTTPS port $preferredPort unavailable, falling back: ${e.message}")
+            }
+        }
+        val srv = LocalShareServer(applicationContext, ip, this, 0, savedCode)
+        srv.start(30_000, false)
+        return srv
+    }
+
+    private fun startRedirectServerWithFallback(httpsPort: Int, preferredPort: Int): RedirectServer {
+        if (preferredPort != 0) {
+            try {
+                val redirect = RedirectServer(httpsPort, preferredPort)
+                redirect.start(30_000, false)
+                return redirect
+            } catch (e: Exception) {
+                android.util.Log.i("DShare", "Preferred redirect port $preferredPort unavailable, falling back: ${e.message}")
+            }
+        }
+        val redirect = RedirectServer(httpsPort, 0)
+        redirect.start(30_000, false)
+        return redirect
+    }
+
+    private fun buildQrUrl(baseUrl: String, code: String) = "$baseUrl/?code=$code"
 
     private fun generateQrBitmap(text: String): Bitmap {
         val size = 512
@@ -175,7 +219,11 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
 
     override fun onClientJoined() {
         mainHandler.post {
-            statusText.text = "코드 확인됨 · 브라우저에서 화면 공유를 시작하세요"
+            clientJoined = true
+            btnRegenerate.isEnabled = false
+            btnRegenerate.alpha = 0.5f
+            statusDot.background.setTint(getColorCompat(R.color.status_connecting))
+            statusText.text = getString(R.string.status_joined)
         }
     }
 
@@ -195,11 +243,18 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     }
 
     override fun onClientStopped() {
+        // Still joined (same websocket session) - just stopped sharing video, so leave
+        // the regenerate button disabled and the "connected" status as-is.
         mainHandler.post { stopStreamingAndReturnToWaiting() }
     }
 
     override fun onClientDisconnected() {
-        mainHandler.post { stopStreamingAndReturnToWaiting() }
+        mainHandler.post {
+            clientJoined = false
+            btnRegenerate.isEnabled = true
+            btnRegenerate.alpha = 1f
+            stopStreamingAndReturnToWaiting()
+        }
     }
 
     // ---------------- WebRtcReceiver.Callbacks (called on main thread already) ----------------
@@ -233,7 +288,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         connectingOverlay.visibility = View.VISIBLE
         successOverlay.visibility = View.GONE
         streamingContainer.visibility = View.INVISIBLE
-        starfield.setWarpMultiplier(StarfieldView.WARP_MULTIPLIER, 900)
+        starfield.setWarpMultiplier(StarfieldView.WARP_MULTIPLIER, 1300)
     }
 
     private fun showSuccessThenStream() {
@@ -245,13 +300,21 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                 // no artificial delay on top of an already-live stream.
                 mainHandler.postDelayed({
                     streamingContainer.alpha = 0f
+                    streamingContainer.scaleX = 0.82f
+                    streamingContainer.scaleY = 0.82f
                     streamingContainer.visibility = View.VISIBLE
-                    streamingContainer.animate().alpha(1f).setDuration(150).withEndAction {
-                        successOverlay.visibility = View.GONE
-                        // Fully hidden behind the video now - stop redrawing it so it
-                        // doesn't compete with the decoder/renderer for CPU/GPU.
-                        starfield.pauseAnimation()
-                    }.start()
+                    streamingContainer.animate()
+                        .alpha(1f)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                        .setDuration(550)
+                        .withEndAction {
+                            successOverlay.visibility = View.GONE
+                            // Fully hidden behind the video now - stop redrawing it so it
+                            // doesn't compete with the decoder/renderer for CPU/GPU.
+                            starfield.pauseAnimation()
+                        }.start()
                     statusDot.setBackgroundResource(R.drawable.shape_status_dot)
                     statusDot.background.setTint(getColorCompat(R.color.status_live))
                     statusText.text = getString(R.string.status_live)
@@ -264,14 +327,22 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         starfield.resumeAnimation()
         starfield.setWarpMultiplier(StarfieldView.IDLE_MULTIPLIER, 800)
         webRtc?.close()
+        streamingContainer.animate().cancel()
+        streamingContainer.scaleX = 1f
+        streamingContainer.scaleY = 1f
         connectingOverlay.visibility = View.GONE
         successOverlay.visibility = View.GONE
         streamingContainer.visibility = View.INVISIBLE
         waitingScroll.visibility = View.VISIBLE
         waitingScroll.alpha = 0f
         waitingScroll.animate().alpha(1f).setDuration(280).start()
-        statusDot.background.setTint(getColorCompat(R.color.status_waiting))
-        statusText.text = getString(R.string.status_waiting)
+        if (clientJoined) {
+            statusDot.background.setTint(getColorCompat(R.color.status_connecting))
+            statusText.text = getString(R.string.status_joined)
+        } else {
+            statusDot.background.setTint(getColorCompat(R.color.status_waiting))
+            statusText.text = getString(R.string.status_waiting)
+        }
     }
 
     private fun getColorCompat(resId: Int) = androidx.core.content.ContextCompat.getColor(this, resId)

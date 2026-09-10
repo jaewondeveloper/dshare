@@ -1,6 +1,7 @@
 package com.dshare.app
 
 import android.content.Context
+import android.media.AudioAttributes
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
@@ -13,6 +14,7 @@ import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import org.webrtc.audio.JavaAudioDeviceModule
 
 class WebRtcReceiver(
     context: Context,
@@ -37,8 +39,26 @@ class WebRtcReceiver(
                 .createInitializationOptions()
         )
         val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
+
+        // Without this, WebRTC's default audio setup routes playback as a voice call
+        // (USAGE_VOICE_COMMUNICATION), which Android maps to the phone call volume
+        // stream - hence showing as "call" and having a much louder, coarser volume
+        // floor than normal media. This is a screen-share viewer, not a call: route
+        // playback through the regular media stream instead.
+        val audioDeviceModule = JavaAudioDeviceModule.builder(context)
+            .setUseHardwareAcousticEchoCanceler(false)
+            .setUseHardwareNoiseSuppressor(false)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build()
+            )
+            .createAudioDeviceModule()
+
         factory = PeerConnectionFactory.builder()
             .setVideoDecoderFactory(decoderFactory)
+            .setAudioDeviceModule(audioDeviceModule)
             .createPeerConnectionFactory()
 
         renderer.init(eglBase.eglBaseContext, null)

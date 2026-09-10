@@ -10,8 +10,10 @@ import javax.net.ssl.KeyManagerFactory
 class LocalShareServer(
     private val context: Context,
     ipAddress: String,
-    private val listener: Listener
-) : NanoWSD(0) {
+    private val listener: Listener,
+    preferredPort: Int = 0,
+    initialCode: String? = null
+) : NanoWSD(preferredPort) {
 
     interface Listener {
         fun onClientJoined()
@@ -23,7 +25,7 @@ class LocalShareServer(
     }
 
     @Volatile
-    var pairingCode: String = PairingCode.generate()
+    var pairingCode: String = initialCode ?: PairingCode.generate()
         private set
 
     @Volatile

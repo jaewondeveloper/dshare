@@ -179,3 +179,10 @@ h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #F5F7FA; }
   min-width: 200px;
   padding: 14px 32px;
 }
+/* .btn:active's transform:scale() alone would replace (not add to) the
+   translateX(-50%) centering above, making the button visibly jump sideways
+   on press - so redeclare both together here, after .btn:active in source
+   order, to win the tie (equal specificity). */
+.live-stop:active {
+  transform: translateX(-50%) scale(0.95);
+}

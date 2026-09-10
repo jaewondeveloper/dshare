@@ -43,7 +43,7 @@ class StarfieldView @JvmOverloads constructor(
         const val CONNECTED_MULTIPLIER = 1f
 
         /** Hyperspace burst while a connection is being negotiated. */
-        const val WARP_MULTIPLIER = 14f
+        const val WARP_MULTIPLIER = 2f
     }
 
     private var lastFrameNanos = 0L
@@ -72,7 +72,11 @@ class StarfieldView @JvmOverloads constructor(
         val h = max(height, 1)
         val x = Random.nextFloat() * w - w / 2f
         val y = Random.nextFloat() * h - h / 2f
-        val z = if (initial) Random.nextFloat() * w else w.toFloat()
+        // Respawns previously all landed on the exact same z (=w), so any stars that
+        // happened to respawn around the same moment stayed locked at identical depth
+        // forever after, drifting together as a visible "layer" instead of blending
+        // into the rest of the field. Spread respawn depth over a range to break that up.
+        val z = if (initial) Random.nextFloat() * w else w * (0.82f + Random.nextFloat() * 0.18f)
         return Star(x, y, z, z)
     }
 
@@ -99,6 +103,7 @@ class StarfieldView @JvmOverloads constructor(
         speedAnimator?.cancel()
         speedAnimator = ValueAnimator.ofFloat(currentSpeedMultiplier, multiplier).apply {
             duration = durationMs
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
             addUpdateListener { currentSpeedMultiplier = it.animatedValue as Float }
             start()
         }

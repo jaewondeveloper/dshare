@@ -161,6 +161,18 @@
     if (e.key === 'Enter') btnJoin.click();
   });
 
+  // Scanning the QR code should be enough on its own - it encodes the code as a
+  // query param, so auto-fill and auto-join instead of making the user retype
+  // what they just scanned.
+  (function autoJoinFromQrCode() {
+    const params = new URLSearchParams(location.search);
+    const code = (params.get('code') || '').trim();
+    if (/^\d{6}$/.test(code)) {
+      codeInput.value = code;
+      btnJoin.click();
+    }
+  })();
+
   async function startShare() {
     shareError.textContent = '';
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
