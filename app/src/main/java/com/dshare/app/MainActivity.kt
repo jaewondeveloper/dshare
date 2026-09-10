@@ -125,7 +125,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         thread {
             android.util.Log.i("DShare", "startServerAsync: thread running")
             try {
-                val ip = NetworkUtils.findLocalIPv4() ?: "0.0.0.0"
+                val ip = NetworkUtils.findLocalIPv4(applicationContext) ?: "0.0.0.0"
                 android.util.Log.i("DShare", "startServerAsync: resolved ip=$ip")
                 val srv = LocalShareServer(applicationContext, ip, this)
                 android.util.Log.i("DShare", "startServerAsync: LocalShareServer constructed")

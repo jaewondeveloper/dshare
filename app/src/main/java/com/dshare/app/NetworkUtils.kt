@@ -1,12 +1,42 @@
 package com.dshare.app
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
 object NetworkUtils {
 
-    /** Finds the device's LAN IPv4 address (Wi-Fi/hotspot), ignoring loopback/VPN interfaces. */
-    fun findLocalIPv4(): String? {
+    /**
+     * Finds this device's IPv4 address on its currently active Wi-Fi connection.
+     *
+     * Asks ConnectivityManager for the network actually carrying TRANSPORT_WIFI and
+     * reads its address directly, instead of guessing by interface name — a device can
+     * have a leftover Wi-Fi-hotspot/AP interface (e.g. "ap0") sitting on a stale address
+     * like 192.168.43.1 even while its real Wi-Fi (wlan0) is on a completely different
+     * subnet, which a name-based heuristic can pick by mistake.
+     */
+    fun findLocalIPv4(context: Context): String? {
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        if (cm != null) {
+            for (network in cm.allNetworks) {
+                val caps = cm.getNetworkCapabilities(network) ?: continue
+                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+                val linkProperties = cm.getLinkProperties(network) ?: continue
+                for (linkAddress in linkProperties.linkAddresses) {
+                    val addr = linkAddress.address
+                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                        return addr.hostAddress
+                    }
+                }
+            }
+        }
+        return fallbackInterfaceScan()
+    }
+
+    /** Best-effort fallback if ConnectivityManager reports no Wi-Fi transport network. */
+    private fun fallbackInterfaceScan(): String? {
         val interfaces = NetworkInterface.getNetworkInterfaces() ?: return null
         val candidates = mutableListOf<String>()
 
@@ -18,9 +48,7 @@ object NetworkUtils {
             for (addr in iface.inetAddresses.toList()) {
                 if (addr is Inet4Address && !addr.isLoopbackAddress) {
                     val ip = addr.hostAddress ?: continue
-                    if (name.contains("wlan") || name.contains("ap") || name.contains("swlan")) {
-                        return ip
-                    }
+                    if (name == "wlan0") return ip
                     candidates.add(ip)
                 }
             }
