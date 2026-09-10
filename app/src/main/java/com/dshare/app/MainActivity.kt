@@ -33,6 +33,8 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     private lateinit var statusText: TextView
     private lateinit var statusDot: View
     private lateinit var qrImage: ImageView
+    private lateinit var codeLoadingSpinner: View
+    private lateinit var qrLoadingSpinner: View
 
     private lateinit var waitingScroll: View
     private lateinit var connectingOverlay: View
@@ -45,6 +47,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var server: LocalShareServer? = null
+    private var redirectServer: RedirectServer? = null
     private var webRtc: WebRtcReceiver? = null
     private var addressUrl: String = ""
 
@@ -86,6 +89,8 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         statusText = findViewById(R.id.statusText)
         statusDot = findViewById(R.id.statusDot)
         qrImage = findViewById(R.id.qrImage)
+        codeLoadingSpinner = findViewById(R.id.codeLoadingSpinner)
+        qrLoadingSpinner = findViewById(R.id.qrLoadingSpinner)
         waitingScroll = findViewById(R.id.waitingScroll)
         connectingOverlay = findViewById(R.id.connectingOverlay)
         successOverlay = findViewById(R.id.successOverlay)
@@ -99,9 +104,8 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     private fun wireButtons() {
         val btnCopy = findViewById<View>(R.id.btnCopy)
         val btnRegenerate = findViewById<View>(R.id.btnRegenerate)
-        val btnStop = findViewById<View>(R.id.btnStop)
 
-        listOf(btnCopy, btnRegenerate, btnStop).forEach { it.applyPressScale() }
+        listOf(btnCopy, btnRegenerate).forEach { it.applyPressScale() }
 
         btnCopy.setOnClickListener {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -112,11 +116,6 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         btnRegenerate.setOnClickListener {
             val newCode = server?.regenerateCode() ?: return@setOnClickListener
             codeText.text = newCode
-        }
-
-        btnStop.setOnClickListener {
-            server?.sendBye()
-            stopStreamingAndReturnToWaiting()
         }
     }
 
@@ -132,12 +131,26 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                 srv.start(30_000, false)
                 android.util.Log.i("DShare", "startServerAsync: server started, port=${srv.listeningPort}")
                 server = srv
-                val url = "https://$ip:${srv.listeningPort}"
+
+                // Plain-HTTP listener that just 302s to the HTTPS server: the HTTPS
+                // socket can't itself answer a plain HTTP request (TLS owns the whole
+                // socket), so typing the address without "https://" - which browsers
+                // resolve to http:// by default - needs this to land anywhere at all.
+                val redirect = RedirectServer(srv.listeningPort)
+                redirect.start(30_000, false)
+                redirectServer = redirect
+                android.util.Log.i("DShare", "startServerAsync: redirect server started, port=${redirect.listeningPort}")
+
+                val url = "http://$ip:${redirect.listeningPort}"
                 addressUrl = url
                 mainHandler.post {
                     addressText.text = url
                     codeText.text = srv.pairingCode
                     qrImage.setImageBitmap(generateQrBitmap(url))
+                    codeText.visibility = View.VISIBLE
+                    qrImage.visibility = View.VISIBLE
+                    codeLoadingSpinner.visibility = View.GONE
+                    qrLoadingSpinner.visibility = View.GONE
                 }
             } catch (e: Throwable) {
                 android.util.Log.e("DShare", "Server start failed", e)
@@ -199,7 +212,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         server?.sendAnswer(sdp)
     }
 
-    override fun onFirstFrameRendered() {
+    override fun onRemoteConnected() {
         mainHandler.post { showSuccessThenStream() }
     }
 
@@ -227,7 +240,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         ConnectAnimator.crossFade(connectingOverlay, successOverlay, duration = 180)
         successCheck.post {
             ConnectAnimator.playJellyCheck(successCheck, successText) {
-                // Video has been decoding since onFirstFrameRendered already fired; only
+                // The peer connection already reached CONNECTED and frames are decoding; only
                 // hold briefly so the checkmark registers, then reveal it immediately -
                 // no artificial delay on top of an already-live stream.
                 mainHandler.postDelayed({
@@ -235,17 +248,20 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                     streamingContainer.visibility = View.VISIBLE
                     streamingContainer.animate().alpha(1f).setDuration(150).withEndAction {
                         successOverlay.visibility = View.GONE
+                        // Fully hidden behind the video now - stop redrawing it so it
+                        // doesn't compete with the decoder/renderer for CPU/GPU.
+                        starfield.pauseAnimation()
                     }.start()
                     statusDot.setBackgroundResource(R.drawable.shape_status_dot)
                     statusDot.background.setTint(getColorCompat(R.color.status_live))
                     statusText.text = getString(R.string.status_live)
-                    starfield.setWarpMultiplier(StarfieldView.CONNECTED_MULTIPLIER, 1200)
                 }, 150)
             }
         }
     }
 
     private fun stopStreamingAndReturnToWaiting() {
+        starfield.resumeAnimation()
         starfield.setWarpMultiplier(StarfieldView.IDLE_MULTIPLIER, 800)
         webRtc?.close()
         connectingOverlay.visibility = View.GONE
@@ -264,6 +280,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         super.onDestroy()
         webRtc?.release()
         server?.stop()
+        redirectServer?.stop()
         stopService(Intent(this, KeepAliveService::class.java))
     }
 }

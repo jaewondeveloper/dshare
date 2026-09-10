@@ -169,11 +169,14 @@
     }
     showOnly(connectingOverlay);
     try {
-      // 1080p60 is the sweet spot for this: visually lossless for screen content, but
+      // 1080p is the sweet spot for this: visually lossless for screen content, but
       // realistically encodable in real time on ordinary hardware. Asking for
       // 1440p/4K "ideal" invites the encoder to fall behind under load, which is what
       // actually produces visible lag/latency - not the network (LAN has headroom).
-      const videoConstraints = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 } };
+      // 30fps target (vs 60) keeps frame timing consistent instead of oscillating,
+      // which is what stutter/choppiness actually is - an unstable frame interval,
+      // not a low one.
+      const videoConstraints = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } };
       let stream;
       try {
         stream = await navigator.mediaDevices.getDisplayMedia({ video: videoConstraints, audio: true });
@@ -208,7 +211,12 @@
         const params = videoSender.getParameters();
         if (!params.encodings) params.encodings = [{}];
         params.encodings[0].maxBitrate = 12000000;
-        params.degradationPreference = 'maintain-resolution';
+        // 'balanced' (not 'maintain-resolution'): forcing fixed resolution under any
+        // transient CPU/network pressure makes the encoder cope by dropping frames in
+        // hard steps instead of smoothly, which is exactly what stutter looks like.
+        // 'balanced' lets WebRTC's own adaptation smooth that out; resolution only
+        // drops if genuinely needed, which real LAN/hardware headroom rarely requires.
+        params.degradationPreference = 'balanced';
         try { await videoSender.setParameters(params); } catch (e) { /* best effort */ }
       }
 

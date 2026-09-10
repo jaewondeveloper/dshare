@@ -106,15 +106,26 @@ class StarfieldView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        running = true
-        lastFrameNanos = 0L
-        Choreographer.getInstance().postFrameCallback(frameCallback)
+        resumeAnimation()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         running = false
         speedAnimator?.cancel()
+    }
+
+    /** Stops the per-frame redraw loop. Call while fully hidden behind the video so it
+     *  doesn't compete with the decoder/renderer for CPU/GPU and cause playback stutter. */
+    fun pauseAnimation() {
+        running = false
+    }
+
+    fun resumeAnimation() {
+        if (running) return
+        running = true
+        lastFrameNanos = 0L
+        Choreographer.getInstance().postFrameCallback(frameCallback)
     }
 
     override fun onDraw(canvas: Canvas) {

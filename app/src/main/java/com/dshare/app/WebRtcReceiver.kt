@@ -8,7 +8,6 @@ import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
-import org.webrtc.RendererCommon
 import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
@@ -24,14 +23,13 @@ class WebRtcReceiver(
     interface Callbacks {
         fun onLocalIceCandidate(sdpMid: String?, sdpMLineIndex: Int, candidate: String)
         fun onAnswerCreated(sdp: String)
-        fun onFirstFrameRendered()
+        fun onRemoteConnected()
         fun onConnectionClosed()
     }
 
     private val eglBase: EglBase = EglBase.create()
     private val factory: PeerConnectionFactory
     private var peerConnection: PeerConnection? = null
-    private var frameNotified = false
 
     init {
         PeerConnectionFactory.initialize(
@@ -43,16 +41,7 @@ class WebRtcReceiver(
             .setVideoDecoderFactory(decoderFactory)
             .createPeerConnectionFactory()
 
-        renderer.init(eglBase.eglBaseContext, object : RendererCommon.RendererEvents {
-            override fun onFirstFrameRendered() {
-                if (!frameNotified) {
-                    frameNotified = true
-                    callbacks.onFirstFrameRendered()
-                }
-            }
-
-            override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {}
-        })
+        renderer.init(eglBase.eglBaseContext, null)
         renderer.setEnableHardwareScaler(true)
         renderer.setMirror(false)
     }
@@ -60,6 +49,14 @@ class WebRtcReceiver(
     fun handleOffer(sdp: String) {
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
         rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+
+        // Local to this connection attempt: SurfaceViewRenderer's own
+        // onFirstFrameRendered() fires only once for the renderer's whole lifetime
+        // (WebRTC never resets that internal flag), so it can't be used to detect
+        // "connected" on a second connection - a reconnect or a different device
+        // joining after the first session ends would hang forever waiting for it.
+        // The PeerConnection's own state is fresh every time, so use that instead.
+        var connectedNotified = false
 
         val pc = factory.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
             override fun onIceCandidate(candidate: IceCandidate) {
@@ -78,7 +75,12 @@ class WebRtcReceiver(
             }
 
             override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
-                if (newState == PeerConnection.PeerConnectionState.CLOSED ||
+                if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
+                    if (!connectedNotified) {
+                        connectedNotified = true
+                        callbacks.onRemoteConnected()
+                    }
+                } else if (newState == PeerConnection.PeerConnectionState.CLOSED ||
                     newState == PeerConnection.PeerConnectionState.FAILED ||
                     newState == PeerConnection.PeerConnectionState.DISCONNECTED
                 ) {
@@ -121,7 +123,6 @@ class WebRtcReceiver(
     fun close() {
         peerConnection?.close()
         peerConnection = null
-        frameNotified = false
         renderer.clearImage()
     }
 

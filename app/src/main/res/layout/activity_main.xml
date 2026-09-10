@@ -82,20 +82,38 @@
                             android:text="@string/label_code"
                             android:textAppearance="@style/Text.Label" />
 
-                        <TextView
-                            android:id="@+id/codeText"
+                        <FrameLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:background="@drawable/shape_code_chip"
-                            android:fontFamily="monospace"
-                            android:letterSpacing="0.35"
-                            android:paddingHorizontal="22dp"
-                            android:paddingVertical="12dp"
-                            android:textColor="@color/accent_dark"
-                            android:textSize="30sp"
-                            android:textStyle="bold"
-                            tools:text="482913" />
+                            android:layout_marginTop="10dp">
+
+                            <TextView
+                                android:id="@+id/codeText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/shape_code_chip"
+                                android:fontFamily="monospace"
+                                android:letterSpacing="0.35"
+                                android:paddingHorizontal="22dp"
+                                android:paddingVertical="12dp"
+                                android:textColor="@color/accent_dark"
+                                android:textSize="30sp"
+                                android:textStyle="bold"
+                                android:visibility="invisible"
+                                tools:text="482913" />
+
+                            <com.google.android.material.progressindicator.CircularProgressIndicator
+                                android:id="@+id/codeLoadingSpinner"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:layout_gravity="center"
+                                android:indeterminate="true"
+                                app:indicatorColor="@color/accent"
+                                app:indicatorSize="28dp"
+                                app:trackColor="@android:color/transparent"
+                                app:trackCornerRadius="14dp"
+                                app:trackThickness="3dp" />
+                        </FrameLayout>
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnRegenerate"
@@ -121,7 +139,20 @@
                             android:id="@+id/qrImage"
                             android:layout_width="88dp"
                             android:layout_height="88dp"
-                            android:contentDescription="@null" />
+                            android:contentDescription="@null"
+                            android:visibility="invisible" />
+
+                        <com.google.android.material.progressindicator.CircularProgressIndicator
+                            android:id="@+id/qrLoadingSpinner"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_gravity="center"
+                            android:indeterminate="true"
+                            app:indicatorColor="@color/accent"
+                            app:indicatorSize="28dp"
+                            app:trackColor="@android:color/transparent"
+                            app:trackCornerRadius="14dp"
+                            app:trackThickness="3dp" />
                     </FrameLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -244,17 +275,6 @@
             android:id="@+id/surfaceRenderer"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
-
-        <ImageButton
-            android:id="@+id/btnStop"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="24dp"
-            android:background="@drawable/shape_fab_stop"
-            android:contentDescription="@string/action_stop"
-            android:padding="16dp"
-            android:src="@drawable/ic_close" />
     </FrameLayout>
 
 </FrameLayout>
