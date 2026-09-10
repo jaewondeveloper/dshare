@@ -1,28 +1,59 @@
 * { box-sizing: border-box; }
 html, body {
   margin: 0; padding: 0; height: 100%;
-  background: #F4F6FA;
+  background: #05060B;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  color: #14161A;
+  color: #F5F7FA;
+  overflow-x: hidden;
 }
+
+#starfield {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  display: block;
+}
+
 .page {
-  min-height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  padding: 24px;
   position: relative;
+  z-index: 1;
+  min-height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px;
 }
+
+.brand {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  color: #F5F7FA;
+  opacity: 0.85;
+}
+.brand-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #5B8CFF;
+  box-shadow: 0 0 8px #5B8CFF;
+}
+
 .card {
-  background: #FFFFFF;
-  border: 1px solid #E7EAF0;
+  background: #12141C;
+  border: 1px solid #262B38;
   border-radius: 24px;
   padding: 32px 28px;
-  max-width: 360px;
+  max-width: 380px;
   width: 100%;
   text-align: center;
-  box-shadow: 0 8px 24px rgba(20,22,26,0.05);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
-h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; }
-.sub { margin: 0 0 22px; color: #6B7280; font-size: 14px; }
+h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #F5F7FA; }
+.sub { margin: 0 0 22px; color: #9AA3B5; font-size: 14px; line-height: 1.5; }
 
 .code-input {
   width: 100%;
@@ -32,13 +63,13 @@ h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; }
   font-family: monospace;
   padding: 14px 10px;
   border-radius: 16px;
-  border: 1.5px solid #E7EAF0;
+  border: 1.5px solid #262B38;
   outline: none;
   margin-bottom: 18px;
-  color: #2158C7;
-  background: #EAF1FF;
+  color: #8FB0FF;
+  background: #1A2036;
 }
-.code-input:focus { border-color: #2F6FED; }
+.code-input:focus { border-color: #5B8CFF; }
 
 .btn {
   width: 100%;
@@ -48,23 +79,25 @@ h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; }
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.12s ease-out;
+  transition: transform 0.12s ease-out, opacity 0.12s ease-out;
   margin-top: 8px;
 }
 .btn:active { transform: scale(0.95); }
-.btn-primary { background: #2F6FED; color: #fff; }
-.btn-primary:hover { background: #2158C7; }
-.btn-outline { background: #fff; color: #14161A; border: 1.5px solid #E7EAF0; }
+.btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+.btn-primary { background: #5B8CFF; color: #05060B; }
+.btn-outline { background: transparent; color: #F5F7FA; border: 1.5px solid #262B38; }
 
-.error { color: #E5484D; font-size: 13px; min-height: 18px; margin: 10px 0 0; }
+.error { color: #FF6B6B; font-size: 13px; min-height: 18px; margin: 10px 0 0; }
 
 .overlay {
   position: fixed; inset: 0;
-  background: #F4F6FA;
+  z-index: 2;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 20px;
+  background: rgba(5,6,11,0.7);
+  backdrop-filter: blur(4px);
 }
-.overlay-text { font-size: 16px; color: #14161A; font-weight: 500; margin: 0; }
+.overlay-text { font-size: 16px; color: #F5F7FA; font-weight: 500; margin: 0; }
 
 /* Google-style indeterminate spinner: no track, rounded cut ends */
 .spinner {
@@ -72,7 +105,7 @@ h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; }
   animation: spin 1.4s linear infinite;
 }
 .spinner-arc {
-  stroke: #2F6FED;
+  stroke: #5B8CFF;
   stroke-linecap: round;
   stroke-dasharray: 126;
   stroke-dashoffset: 0;
@@ -90,7 +123,7 @@ h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; }
 .check-circle {
   width: 96px; height: 96px;
   border-radius: 50%;
-  background: #2F6FED;
+  background: #5B8CFF;
   display: flex; align-items: center; justify-content: center;
   transform: scale(0);
   animation: jellyX 0.26s cubic-bezier(.34,1.56,.64,1) forwards,
@@ -111,7 +144,7 @@ h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; }
 
 .live-dot {
   width: 14px; height: 14px; border-radius: 50%;
-  background: #2FBE6B;
+  background: #3ED67C;
   animation: pulse 1.4s ease-in-out infinite;
 }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }

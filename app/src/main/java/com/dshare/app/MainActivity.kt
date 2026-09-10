@@ -219,7 +219,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         connectingOverlay.alpha = 1f
         connectingOverlay.visibility = View.VISIBLE
         successOverlay.visibility = View.GONE
-        streamingContainer.visibility = View.GONE
+        streamingContainer.visibility = View.INVISIBLE
         starfield.setWarpMultiplier(StarfieldView.WARP_MULTIPLIER, 900)
     }
 
@@ -247,7 +247,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         webRtc?.close()
         connectingOverlay.visibility = View.GONE
         successOverlay.visibility = View.GONE
-        streamingContainer.visibility = View.GONE
+        streamingContainer.visibility = View.INVISIBLE
         waitingScroll.visibility = View.VISIBLE
         waitingScroll.alpha = 0f
         waitingScroll.animate().alpha(1f).setDuration(280).start()

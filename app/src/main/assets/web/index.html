@@ -2,26 +2,34 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>DShare 화면 공유</title>
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <canvas id="starfield"></canvas>
+
   <div class="page" id="page">
 
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <span>DShare</span>
+    </div>
+
     <div class="card" id="joinCard">
-      <h1>DShare</h1>
-      <p class="sub">기기에 표시된 6자리 코드를 입력하세요</p>
-      <input id="codeInput" class="code-input" inputmode="numeric" maxlength="6" placeholder="000000" />
+      <h1>화면 공유 연결</h1>
+      <p class="sub">기기 화면에 표시된 6자리 코드를 입력하세요</p>
+      <input id="codeInput" class="code-input" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off" />
       <button id="btnJoin" class="btn btn-primary">연결</button>
       <p class="error" id="joinError"></p>
     </div>
 
     <div class="card" id="shareCard" hidden>
-      <h1>DShare</h1>
-      <p class="sub" id="shareSub">코드가 확인되었습니다</p>
+      <h1>연결됨</h1>
+      <p class="sub" id="shareSub">아래 버튼을 누르면 공유할 화면/창을 선택하는<br/>브라우저 권한 요청이 표시됩니다</p>
       <button id="btnShare" class="btn btn-primary">화면 공유 시작</button>
       <button id="btnStop" class="btn btn-outline" hidden>공유 중지</button>
+      <p class="error" id="shareError"></p>
     </div>
 
     <div class="overlay" id="connectingOverlay" hidden>
