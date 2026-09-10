@@ -145,9 +145,37 @@ h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #F5F7FA; }
 #successCaption { opacity: 0; animation: fadeUp 0.28s ease-out 0.52s forwards; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 
-.live-dot {
-  width: 14px; height: 14px; border-radius: 50%;
-  background: #3ED67C;
-  animation: pulse 1.4s ease-in-out infinite;
+/* Live sharing state: let the starfield show through clearly, with just a
+   rotating black gradient aura behind the centered "화면 공유 중" text. */
+.overlay-live {
+  background: transparent;
+  backdrop-filter: none;
+  position: fixed;
 }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.live-aura {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 520px; height: 520px;
+  margin: -260px 0 0 -260px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #000000 0deg, #1c2033 90deg, #000000 180deg, #1c2033 270deg, #000000 360deg);
+  filter: blur(50px);
+  opacity: 0.75;
+  animation: rotateAura 10s linear infinite;
+  z-index: -1;
+}
+@keyframes rotateAura { to { transform: rotate(360deg); } }
+.live-text {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.live-stop {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  min-width: 200px;
+  padding: 14px 32px;
+}
