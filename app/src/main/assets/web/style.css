@@ -97,6 +97,9 @@ h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #F5F7FA; }
   background: rgba(5,6,11,0.7);
   backdrop-filter: blur(4px);
 }
+/* Author rules beat the browser's default [hidden]{display:none} regardless of
+   specificity, so anything with display:flex/block must be re-hidden explicitly. */
+[hidden] { display: none !important; }
 .overlay-text { font-size: 16px; color: #F5F7FA; font-weight: 500; margin: 0; }
 
 /* Google-style indeterminate spinner: no track, rounded cut ends */
