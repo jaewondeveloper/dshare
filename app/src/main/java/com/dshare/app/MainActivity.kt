@@ -28,6 +28,18 @@ import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcReceiver.Callbacks {
 
+    companion object {
+        /** Minimum time the "연결하는 중" buildup (accelerating starfield) holds before the
+         *  video is revealed, regardless of how fast the actual handshake completes. */
+        private const val CONNECT_BUILDUP_MS = 3000L
+    }
+
+    private var connectingStartedAt = 0L
+    /** Bumped whenever a connect attempt starts or a session ends, so any async step
+     *  still in flight from a stale attempt (postDelayed/post/animator callbacks) can
+     *  tell it's been superseded and bail out instead of reviving stale UI. */
+    private var connectSessionId = 0
+
     private lateinit var addressText: TextView
     private lateinit var codeText: TextView
     private lateinit var statusText: TextView
@@ -243,18 +255,27 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     }
 
     override fun onClientStopped() {
-        // Still joined (same websocket session) - just stopped sharing video, so leave
-        // the regenerate button disabled and the "connected" status as-is.
-        mainHandler.post { stopStreamingAndReturnToWaiting() }
+        // Reset fully rather than keeping "connected" shown: it read as stuck/wrong
+        // to the user once sharing ended, even though the websocket session is
+        // technically still open. The same browser can still reshare without
+        // retyping the code - only the Android-side indicator resets.
+        mainHandler.post {
+            resetJoinState()
+            stopStreamingAndReturnToWaiting()
+        }
     }
 
     override fun onClientDisconnected() {
         mainHandler.post {
-            clientJoined = false
-            btnRegenerate.isEnabled = true
-            btnRegenerate.alpha = 1f
+            resetJoinState()
             stopStreamingAndReturnToWaiting()
         }
+    }
+
+    private fun resetJoinState() {
+        clientJoined = false
+        btnRegenerate.isEnabled = true
+        btnRegenerate.alpha = 1f
     }
 
     // ---------------- WebRtcReceiver.Callbacks (called on main thread already) ----------------
@@ -272,7 +293,10 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     }
 
     override fun onConnectionClosed() {
-        mainHandler.post { stopStreamingAndReturnToWaiting() }
+        mainHandler.post {
+            resetJoinState()
+            stopStreamingAndReturnToWaiting()
+        }
     }
 
     // ---------------- UI state transitions ----------------
@@ -282,48 +306,72 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     }
 
     private fun showConnecting() {
+        connectSessionId++
         statusText.text = getString(R.string.status_connecting)
-        waitingScroll.visibility = View.GONE
+        connectingStartedAt = System.currentTimeMillis()
+        waitingScroll.animate().cancel()
+        waitingScroll.animate().alpha(0f).setDuration(320).withEndAction {
+            waitingScroll.visibility = View.GONE
+            waitingScroll.alpha = 1f // reset so the next fade-in starts from a clean state
+        }.start()
         connectingOverlay.alpha = 1f
         connectingOverlay.visibility = View.VISIBLE
         successOverlay.visibility = View.GONE
         streamingContainer.visibility = View.INVISIBLE
-        starfield.setWarpMultiplier(StarfieldView.WARP_MULTIPLIER, 1300)
+        // Ramp across the full buildup window so the speed-up reads as gradual/continuous
+        // rather than a quick burst that then just sits at top speed waiting.
+        starfield.setWarpMultiplier(StarfieldView.WARP_MULTIPLIER, CONNECT_BUILDUP_MS)
     }
 
     private fun showSuccessThenStream() {
-        ConnectAnimator.crossFade(connectingOverlay, successOverlay, duration = 180)
-        successCheck.post {
-            ConnectAnimator.playJellyCheck(successCheck, successText) {
-                // The peer connection already reached CONNECTED and frames are decoding; only
-                // hold briefly so the checkmark registers, then reveal it immediately -
-                // no artificial delay on top of an already-live stream.
-                mainHandler.postDelayed({
-                    streamingContainer.alpha = 0f
-                    streamingContainer.scaleX = 0.82f
-                    streamingContainer.scaleY = 0.82f
-                    streamingContainer.visibility = View.VISIBLE
-                    streamingContainer.animate()
-                        .alpha(1f)
-                        .scaleX(1f)
-                        .scaleY(1f)
-                        .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
-                        .setDuration(550)
-                        .withEndAction {
-                            successOverlay.visibility = View.GONE
-                            // Fully hidden behind the video now - stop redrawing it so it
-                            // doesn't compete with the decoder/renderer for CPU/GPU.
-                            starfield.pauseAnimation()
-                        }.start()
-                    statusDot.setBackgroundResource(R.drawable.shape_status_dot)
-                    statusDot.background.setTint(getColorCompat(R.color.status_live))
-                    statusText.text = getString(R.string.status_live)
-                }, 150)
+        // Hold the accelerating starfield for a consistent ~3s buildup regardless of how
+        // fast the actual WebRTC handshake was, so the reveal always reads as a deliberate
+        // "arriving" moment rather than snapping in unpredictably early or late.
+        val elapsed = System.currentTimeMillis() - connectingStartedAt
+        val remaining = (CONNECT_BUILDUP_MS - elapsed).coerceAtLeast(0)
+        // Captured now: if a stop/disconnect arrives while this sequence is still
+        // in flight (postDelayed -> post -> animator -> postDelayed, several async
+        // hops deep), connectSessionId will have moved on by the time each hop
+        // resumes, and every hop below bails out instead of reviving a UI that was
+        // already reset back to waiting.
+        val sessionId = connectSessionId
+        mainHandler.postDelayed(buildupWait@{
+            if (sessionId != connectSessionId) return@buildupWait
+            ConnectAnimator.crossFade(connectingOverlay, successOverlay, duration = 180)
+            successCheck.post {
+                if (sessionId != connectSessionId) return@post
+                ConnectAnimator.playJellyCheck(successCheck, successText) {
+                    if (sessionId != connectSessionId) return@playJellyCheck
+                    mainHandler.postDelayed(revealHold@{
+                        if (sessionId != connectSessionId) return@revealHold
+                        streamingContainer.alpha = 0f
+                        streamingContainer.scaleX = 0.82f
+                        streamingContainer.scaleY = 0.82f
+                        streamingContainer.visibility = View.VISIBLE
+                        streamingContainer.animate()
+                            .alpha(1f)
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                            .setDuration(550)
+                            .withEndAction {
+                                if (sessionId != connectSessionId) return@withEndAction
+                                successOverlay.visibility = View.GONE
+                                // Fully hidden behind the video now - stop redrawing it so it
+                                // doesn't compete with the decoder/renderer for CPU/GPU.
+                                starfield.pauseAnimation()
+                            }.start()
+                        statusDot.setBackgroundResource(R.drawable.shape_status_dot)
+                        statusDot.background.setTint(getColorCompat(R.color.status_live))
+                        statusText.text = getString(R.string.status_live)
+                    }, 150)
+                }
             }
-        }
+        }, remaining)
     }
 
     private fun stopStreamingAndReturnToWaiting() {
+        connectSessionId++ // invalidate any in-flight showConnecting()/showSuccessThenStream() callbacks
         starfield.resumeAnimation()
         starfield.setWarpMultiplier(StarfieldView.IDLE_MULTIPLIER, 800)
         webRtc?.close()
@@ -333,16 +381,15 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         connectingOverlay.visibility = View.GONE
         successOverlay.visibility = View.GONE
         streamingContainer.visibility = View.INVISIBLE
+        waitingScroll.animate().cancel()
         waitingScroll.visibility = View.VISIBLE
         waitingScroll.alpha = 0f
         waitingScroll.animate().alpha(1f).setDuration(280).start()
-        if (clientJoined) {
-            statusDot.background.setTint(getColorCompat(R.color.status_connecting))
-            statusText.text = getString(R.string.status_joined)
-        } else {
-            statusDot.background.setTint(getColorCompat(R.color.status_waiting))
-            statusText.text = getString(R.string.status_waiting)
-        }
+        // clientJoined is always false by the time this runs now - every path that
+        // ends a session (stop/disconnect/connection-closed) resets it first - so
+        // this always lands back on the plain "waiting" status.
+        statusDot.background.setTint(getColorCompat(R.color.status_waiting))
+        statusText.text = getString(R.string.status_waiting)
     }
 
     private fun getColorCompat(resId: Int) = androidx.core.content.ContextCompat.getColor(this, resId)

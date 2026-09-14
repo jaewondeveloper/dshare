@@ -156,8 +156,12 @@ class LocalShareServer(
         override fun onPong(pong: WebSocketFrame) {}
 
         override fun onException(exception: java.io.IOException) {
+            // A dirty disconnect (WiFi drop, crashed/killed tab) lands here instead of
+            // onClose() - without notifying the listener too, the Android UI never
+            // learned the client was gone and kept showing "device connected" forever.
             if (activeSocket == this) {
                 activeSocket = null
+                listener.onClientDisconnected()
             }
         }
     }

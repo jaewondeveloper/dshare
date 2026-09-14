@@ -32,6 +32,20 @@ class WebRtcReceiver(
     private val eglBase: EglBase = EglBase.create()
     private val factory: PeerConnectionFactory
     private var peerConnection: PeerConnection? = null
+    private var attachedTrack: VideoTrack? = null
+
+    // onTrack and onAddStream can both fire for the same track (Unified Plan still
+    // raises the legacy onAddStream for compatibility), and renegotiation can raise
+    // either again for a track that's already attached. Without dedup, the renderer
+    // was accumulating multiple sink registrations on the same track - meaning it
+    // decoded/rendered every frame N times over - which compounds over a session and
+    // matches the reported "fine at first, then progressively laggier" symptom.
+    private fun attachVideoTrack(track: VideoTrack) {
+        if (attachedTrack === track) return
+        attachedTrack?.removeSink(renderer)
+        track.addSink(renderer)
+        attachedTrack = track
+    }
 
     init {
         PeerConnectionFactory.initialize(
@@ -86,12 +100,12 @@ class WebRtcReceiver(
             override fun onTrack(transceiver: org.webrtc.RtpTransceiver) {
                 val track = transceiver.receiver.track()
                 if (track is VideoTrack) {
-                    track.addSink(renderer)
+                    attachVideoTrack(track)
                 }
             }
 
             override fun onAddStream(stream: MediaStream) {
-                stream.videoTracks.forEach { it.addSink(renderer) }
+                stream.videoTracks.firstOrNull()?.let { attachVideoTrack(it) }
             }
 
             override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
@@ -141,6 +155,8 @@ class WebRtcReceiver(
     }
 
     fun close() {
+        attachedTrack?.removeSink(renderer)
+        attachedTrack = null
         peerConnection?.close()
         peerConnection = null
         renderer.clearImage()
