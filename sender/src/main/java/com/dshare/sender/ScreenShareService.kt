@@ -168,9 +168,11 @@ class ScreenShareService : Service(), WebRtcSender.Callbacks {
             signaling = reused
             signaling.setListener(listener)
             needsJoin = false
+            android.util.Log.i("DShareSender", "beginCapture: reusing already-joined signaling connection")
         } else {
             signaling = SignalingClient(host, port, listener)
             needsJoin = true
+            android.util.Log.i("DShareSender", "beginCapture: opening a fresh signaling connection (no matching ActiveSession)")
         }
         ActiveSession.clear()
         signalingClient = signaling
@@ -198,6 +200,9 @@ class ScreenShareService : Service(), WebRtcSender.Callbacks {
 
     override fun onOfferCreated(sdp: String) {
         signalingClient?.sendOffer(sdp)
+    }
+
+    override fun onConnected() {
         listener?.onSharingStarted()
     }
 

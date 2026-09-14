@@ -63,6 +63,7 @@ class SignalingClient(
         val request = Request.Builder().url("wss://$host:$port/ws").build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                android.util.Log.i("DShareSender", "signaling socket open, sending join")
                 webSocket.send(JSONObject().put("type", "join").put("code", code).toString())
             }
 
@@ -71,16 +72,19 @@ class SignalingClient(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                android.util.Log.i("DShareSender", "signaling socket closed: code=$code reason=$reason")
                 listener.onSocketClosed()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                android.util.Log.e("DShareSender", "signaling socket failure", t)
                 listener.onSocketClosed()
             }
         })
     }
 
     private fun handleMessage(text: String) {
+        android.util.Log.i("DShareSender", "signaling <- $text")
         val json = try {
             JSONObject(text)
         } catch (e: Exception) {
@@ -100,11 +104,12 @@ class SignalingClient(
     }
 
     fun sendOffer(sdp: String) {
-        webSocket?.send(JSONObject().put("type", "offer").put("sdp", sdp).toString())
+        val ok = webSocket?.send(JSONObject().put("type", "offer").put("sdp", sdp).toString())
+        android.util.Log.i("DShareSender", "sendOffer -> sent=$ok (webSocket null=${webSocket == null})")
     }
 
     fun sendIceCandidate(sdpMid: String?, sdpMLineIndex: Int, candidate: String) {
-        webSocket?.send(
+        val ok = webSocket?.send(
             JSONObject()
                 .put("type", "ice")
                 .put("sdpMid", sdpMid)
@@ -112,6 +117,7 @@ class SignalingClient(
                 .put("candidate", candidate)
                 .toString()
         )
+        android.util.Log.i("DShareSender", "sendIceCandidate -> sent=$ok (webSocket null=${webSocket == null})")
     }
 
     fun sendStop() {

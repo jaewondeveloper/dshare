@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity(), ScreenShareService.StateListener {
         deviceList.adapter = adapter
 
         btnShareToggle.setOnClickListener {
-            if (isSharing) stopSharing() else requestScreenCapture()
+            if (isSharing) disconnectAndReturnToList() else requestScreenCapture()
         }
         btnDisconnect.setOnClickListener { disconnectAndReturnToList() }
 
@@ -245,13 +245,17 @@ class MainActivity : AppCompatActivity(), ScreenShareService.StateListener {
 
     private fun disconnectAndReturnToList() {
         if (isSharing) {
-            stopSharing()
+            val intent = Intent(this, ScreenShareService::class.java).setAction(ScreenShareService.ACTION_STOP)
+            startService(intent)
+            isSharing = false
         } else {
             ActiveSession.client?.close()
             ActiveSession.clear()
         }
         connectedDevice = null
         connectedCode = null
+        shareStatusText.text = ""
+        btnShareToggle.text = getString(R.string.action_share_start)
         connectedScreen.visibility = View.GONE
         deviceListScreen.visibility = View.VISIBLE
         updateDeviceList(emptyList())
@@ -278,15 +282,10 @@ class MainActivity : AppCompatActivity(), ScreenShareService.StateListener {
         ContextCompat.startForegroundService(this, intent)
         isSharing = true
         btnShareToggle.text = getString(R.string.action_share_stop)
-        shareStatusText.text = getString(R.string.status_sharing)
-    }
-
-    private fun stopSharing() {
-        val intent = Intent(this, ScreenShareService::class.java).setAction(ScreenShareService.ACTION_STOP)
-        startService(intent)
-        isSharing = false
-        btnShareToggle.text = getString(R.string.action_share_start)
-        shareStatusText.text = ""
+        // Not actually sharing yet - the PeerConnection still has to connect. Real
+        // confirmation comes from onSharingStarted(), fired only once WebRTC reports
+        // CONNECTED; showing "공유 중" here would be a lie if the handshake stalls.
+        shareStatusText.text = getString(R.string.status_connecting_short)
     }
 
     override fun onSharingStarted() {
@@ -299,9 +298,17 @@ class MainActivity : AppCompatActivity(), ScreenShareService.StateListener {
 
     override fun onSharingStopped(errorMessage: String?) {
         runOnUiThread {
+            // Whatever ended the session - the user's own stop, the receiver
+            // disconnecting, the projection being revoked, a failed handshake - there is
+            // nothing left connected, so always land back on the device list rather than
+            // leaving a stale "connected" screen behind.
             isSharing = false
-            btnShareToggle.text = getString(R.string.action_share_start)
-            shareStatusText.text = errorMessage ?: ""
+            if (!errorMessage.isNullOrEmpty()) {
+                Toast.makeText(this, errorMessage, Toast.LENGTH_SHORT).show()
+            }
+            if (connectedDevice != null) {
+                disconnectAndReturnToList()
+            }
         }
     }
 }

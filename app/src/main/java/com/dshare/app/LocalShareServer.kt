@@ -47,10 +47,12 @@ class LocalShareServer(
     }
 
     fun sendAnswer(sdp: String) {
+        android.util.Log.i("DShare", "sendAnswer (activeSocket null=${activeSocket == null})")
         activeSocket?.sendJson(JSONObject().put("type", "answer").put("sdp", sdp))
     }
 
     fun sendIceCandidate(sdpMid: String?, sdpMLineIndex: Int, candidate: String) {
+        android.util.Log.i("DShare", "sendIceCandidate (activeSocket null=${activeSocket == null})")
         activeSocket?.sendJson(
             JSONObject()
                 .put("type", "ice")
@@ -116,6 +118,7 @@ class LocalShareServer(
 
         override fun onMessage(message: WebSocketFrame) {
             val text = message.textPayload ?: return
+            android.util.Log.i("DShare", "signaling <- ${text.take(120)}")
             val json = try {
                 JSONObject(text)
             } catch (e: Exception) {
@@ -125,11 +128,12 @@ class LocalShareServer(
             when (json.optString("type")) {
                 "join" -> handleJoin(json.optString("code"))
                 "offer" -> if (joined) listener.onOffer(json.optString("sdp"))
+                    else android.util.Log.w("DShare", "dropped offer: socket not joined")
                 "ice" -> if (joined) listener.onRemoteIceCandidate(
                     json.optString("sdpMid", null),
                     json.optInt("sdpMLineIndex", 0),
                     json.optString("candidate")
-                )
+                ) else android.util.Log.w("DShare", "dropped ice candidate: socket not joined")
                 "stop" -> if (joined) listener.onClientStopped()
             }
         }
