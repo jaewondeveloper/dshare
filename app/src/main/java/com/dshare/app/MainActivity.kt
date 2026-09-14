@@ -65,6 +65,10 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     private var clientJoined = false
     private lateinit var btnRegenerate: View
 
+    private var nsdAdvertiser: NsdAdvertiser? = null
+    private var deviceName: String? = null
+    private var pendingNsdPorts: Pair<Int, Int>? = null // (httpsPort, redirectPort)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         android.util.Log.i("DShare", "onCreate: start")
@@ -76,8 +80,48 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         android.util.Log.i("DShare", "onCreate: wireButtons done")
         startKeepAliveService()
         android.util.Log.i("DShare", "onCreate: keepalive service started")
+        nsdAdvertiser = NsdAdvertiser(applicationContext)
+        ensureDeviceName()
         startServerAsync()
         android.util.Log.i("DShare", "onCreate: startServerAsync() called (thread launch requested)")
+    }
+
+    private fun ensureDeviceName() {
+        val saved = AppPrefs.getDeviceName(applicationContext)
+        if (saved != null) {
+            deviceName = saved
+            tryRegisterNsd()
+            return
+        }
+        showDeviceNamePrompt()
+    }
+
+    private fun showDeviceNamePrompt() {
+        val view = layoutInflater.inflate(R.layout.dialog_device_name, null)
+        val input = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.deviceNameInput)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.device_name_prompt_title)
+            .setView(view)
+            .setCancelable(false)
+            .setPositiveButton(R.string.action_confirm, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val typed = input.text?.toString()?.trim().orEmpty()
+                val finalName = typed.ifEmpty { getString(R.string.device_name_default) }
+                AppPrefs.saveDeviceName(applicationContext, finalName)
+                deviceName = finalName
+                dialog.dismiss()
+                tryRegisterNsd()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun tryRegisterNsd() {
+        val name = deviceName ?: return
+        val ports = pendingNsdPorts ?: return
+        nsdAdvertiser?.register(name, ports.first, ports.second)
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -172,6 +216,8 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                     qrImage.visibility = View.VISIBLE
                     codeLoadingSpinner.visibility = View.GONE
                     qrLoadingSpinner.visibility = View.GONE
+                    pendingNsdPorts = srv.listeningPort to redirect.listeningPort
+                    tryRegisterNsd()
                 }
             } catch (e: Throwable) {
                 android.util.Log.e("DShare", "Server start failed", e)
@@ -396,6 +442,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
 
     override fun onDestroy() {
         super.onDestroy()
+        nsdAdvertiser?.unregister()
         webRtc?.release()
         server?.stop()
         redirectServer?.stop()

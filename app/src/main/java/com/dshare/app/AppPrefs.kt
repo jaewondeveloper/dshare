@@ -10,8 +10,15 @@ object AppPrefs {
     private const val KEY_CODE = "pairing_code"
     private const val KEY_HTTPS_PORT = "https_port"
     private const val KEY_REDIRECT_PORT = "redirect_port"
+    private const val KEY_DEVICE_NAME = "device_name"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun getDeviceName(context: Context): String? = prefs(context).getString(KEY_DEVICE_NAME, null)
+
+    fun saveDeviceName(context: Context, name: String) {
+        prefs(context).edit().putString(KEY_DEVICE_NAME, name).apply()
+    }
 
     fun getSavedCode(context: Context): String? = prefs(context).getString(KEY_CODE, null)
 

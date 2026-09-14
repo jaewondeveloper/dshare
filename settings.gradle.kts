@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DShare"
 include(":app")
+include(":sender")
