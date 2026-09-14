@@ -145,24 +145,14 @@ class WebRtcSender(
 
         val sender = pc.addTrack(track, listOf("dshare_stream"))
 
-        // Prefer H.264: most phones have a hardware encoder for it, keeping encode time
-        // low and steady - a software encoder falling behind is what actually produces
-        // growing lag, not the LAN.
-        val transceiver = pc.transceivers.find { it.sender === sender }
-        if (transceiver != null) {
-            try {
-                val capabilities = factory.getRtpSenderCapabilities(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO)
-                val codecs = capabilities?.codecs
-                if (codecs != null) {
-                    val h264 = codecs.filter { it.name.equals("H264", ignoreCase = true) }
-                    val rest = codecs.filterNot { it.name.equals("H264", ignoreCase = true) }
-                    if (h264.isNotEmpty()) transceiver.setCodecPreferences(h264 + rest)
-                }
-            } catch (e: Exception) {
-                // Best effort - fall back to default codec negotiation.
-            }
-        }
-
+        // A previous attempt here called transceiver.setCodecPreferences() with the raw
+        // capability list from getRtpSenderCapabilities() to force H.264 first. On at
+        // least one real device that produced a broken offer - the video m-line came out
+        // as "m=video 0 UDP/TLS/RTP/SAVPF 0" (port 0, payload type 0), which the receiver
+        // correctly answered as "a=inactive": a dead media section that never leaves ICE
+        // CHECKING, matching the "stuck on connecting" reports. DefaultVideoEncoderFactory
+        // already prefers a hardware-backed encoder among whatever codec actually gets
+        // negotiated, so default negotiation is used instead of hand-picking a codec list.
         val params = sender.getParameters()
         if (params.encodings.isNotEmpty()) {
             params.encodings[0].maxBitrateBps = 12_000_000
