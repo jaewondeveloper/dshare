@@ -96,6 +96,10 @@ class MainActivity : AppCompatActivity(), ScreenShareService.StateListener {
         if (ScreenShareService.listener == this) ScreenShareService.listener = null
         discovery?.stop()
         validationClient?.close()
+        if (!isSharing) {
+            ActiveSession.client?.close()
+            ActiveSession.clear()
+        }
     }
 
     private fun updateDeviceList(devices: List<DiscoveredDevice>) {
@@ -172,11 +176,32 @@ class MainActivity : AppCompatActivity(), ScreenShareService.StateListener {
                     dialog.dismiss()
                     showConnectedScreen(device)
                 }
-                // Only one signaling session is accepted at a time by the receiver, and
-                // the real session (for the actual share) is opened independently by
-                // ScreenShareService - close this validation-only connection right away.
-                validationClient?.close()
+                // Only one signaling session is accepted at a time by the receiver. Instead of
+                // closing this validated connection and having ScreenShareService open a brand
+                // new one later (which races the receiver's cleanup of this socket), hand this
+                // same live connection off to the service via ActiveSession.
+                val joinedClient = validationClient
+                ActiveSession.client = joinedClient
+                ActiveSession.host = device.host
+                ActiveSession.port = device.port
+                ActiveSession.code = code
+                ActiveSession.deviceName = device.name
                 validationClient = null
+
+                // Swap in a listener that watches for the connection dying while the user is
+                // still looking at the "connected" screen, before they've pressed share.
+                joinedClient?.setListener(object : SignalingClient.Listener {
+                    override fun onJoined() {}
+                    override fun onJoinError(message: String) {}
+                    override fun onAnswer(sdp: String) {}
+                    override fun onRemoteIce(sdpMid: String?, sdpMLineIndex: Int, candidate: String) {}
+                    override fun onBye() {
+                        runOnUiThread { disconnectAndReturnToList() }
+                    }
+                    override fun onSocketClosed() {
+                        runOnUiThread { disconnectAndReturnToList() }
+                    }
+                })
             }
 
             override fun onJoinError(message: String) {
@@ -219,7 +244,12 @@ class MainActivity : AppCompatActivity(), ScreenShareService.StateListener {
     }
 
     private fun disconnectAndReturnToList() {
-        if (isSharing) stopSharing()
+        if (isSharing) {
+            stopSharing()
+        } else {
+            ActiveSession.client?.close()
+            ActiveSession.clear()
+        }
         connectedDevice = null
         connectedCode = null
         connectedScreen.visibility = View.GONE

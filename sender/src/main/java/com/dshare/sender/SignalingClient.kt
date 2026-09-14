@@ -25,8 +25,12 @@ import javax.net.ssl.X509TrustManager
 class SignalingClient(
     private val host: String,
     private val port: Int,
-    private val listener: Listener
+    private var listener: Listener
 ) {
+    fun setListener(newListener: Listener) {
+        listener = newListener
+    }
+
     interface Listener {
         fun onJoined()
         fun onJoinError(message: String)

@@ -130,10 +130,10 @@ class ScreenShareService : Service(), WebRtcSender.Callbacks {
         val sender = WebRtcSender(applicationContext, this)
         webRtcSender = sender
 
-        val signaling = SignalingClient(host, port, object : SignalingClient.Listener {
+        val listener = object : SignalingClient.Listener {
             override fun onJoined() {
-                // Already joined once from the Activity before the permission prompt;
-                // a second join with the same still-valid code is expected here.
+                // Only relevant when this service had to open a fresh connection below
+                // (the reused-session path is already past "joined" by definition).
             }
 
             override fun onJoinError(message: String) {
@@ -155,7 +155,24 @@ class ScreenShareService : Service(), WebRtcSender.Callbacks {
             override fun onSocketClosed() {
                 stopSharing()
             }
-        })
+        }
+
+        // Reuse the already-joined connection handed off by MainActivity's pairing-code
+        // validation whenever it matches this request, instead of opening a second signaling
+        // session for the same code - the receiver only accepts one at a time, and racing a
+        // fresh join against the still-closing validation socket is what used to break this.
+        val reused = ActiveSession.client
+        val signaling: SignalingClient
+        val needsJoin: Boolean
+        if (reused != null && ActiveSession.host == host && ActiveSession.port == port && ActiveSession.code == code) {
+            signaling = reused
+            signaling.setListener(listener)
+            needsJoin = false
+        } else {
+            signaling = SignalingClient(host, port, listener)
+            needsJoin = true
+        }
+        ActiveSession.clear()
         signalingClient = signaling
 
         val projectionCallback = object : MediaProjection.Callback() {
@@ -170,10 +187,9 @@ class ScreenShareService : Service(), WebRtcSender.Callbacks {
         // which is why startForegroundCompat() above had to run first.
         sender.startCapture(resultData, projectionCallback)
 
-        // Re-join with the same code: this is a fresh signaling session owned entirely
-        // by the service, independent of whatever the Activity's own validation socket
-        // is doing (it may already be closed by now).
-        signaling.connectAndJoin(code)
+        if (needsJoin) {
+            signaling.connectAndJoin(code)
+        }
     }
 
     override fun onLocalIceCandidate(sdpMid: String?, sdpMLineIndex: Int, candidate: String) {
