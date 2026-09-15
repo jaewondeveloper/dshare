@@ -17,6 +17,9 @@ import org.webrtc.ScreenCapturerAndroid
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
+import org.webrtc.VideoCodecInfo
+import org.webrtc.VideoEncoder
+import org.webrtc.VideoEncoderFactory
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 
@@ -62,10 +65,24 @@ class WebRtcSender(
             PeerConnectionFactory.InitializationOptions.builder(context)
                 .createInitializationOptions()
         )
-        val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
+        // H265 excluded: this stream-webrtc-android build advertises it as a supported
+        // encoder codec, but on at least one real device including it in codec
+        // negotiation left the offer's video m-line dead ("m=video 0 ... 0", answered
+        // "a=inactive" by the receiver) - WebRTC has no standardized RTP/SDP mapping for
+        // H265 in the first place, so this fork's support for it is exotic at best.
+        val encoderFactory = H265FilteringEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
+        val supported = encoderFactory.supportedCodecs
+        android.util.Log.i("DShareSender", "encoder factory supported codecs: ${supported.joinToString { it.name }}")
         factory = PeerConnectionFactory.builder()
             .setVideoEncoderFactory(encoderFactory)
             .createPeerConnectionFactory()
+    }
+
+    private class H265FilteringEncoderFactory(private val delegate: VideoEncoderFactory) : VideoEncoderFactory {
+        private fun isH265(codec: VideoCodecInfo) = codec.name.equals("H265", ignoreCase = true)
+        override fun createEncoder(info: VideoCodecInfo): VideoEncoder? = delegate.createEncoder(info)
+        override fun getSupportedCodecs(): Array<VideoCodecInfo> = delegate.supportedCodecs.filterNot(::isH265).toTypedArray()
+        override fun getImplementations(): Array<VideoCodecInfo> = delegate.implementations.filterNot(::isH265).toTypedArray()
     }
 
     /** [permissionData] is the raw Intent returned from the MediaProjection permission
@@ -143,7 +160,32 @@ class WebRtcSender(
         }
         peerConnection = pc
 
-        val sender = pc.addTrack(track, listOf("dshare_stream"))
+        // addTrack() creates a SEND_RECV transceiver by default and requires finding it
+        // afterwards via pc.transceivers - which turned out to never actually match
+        // (`it.sender === sender` never succeeded here; the JNI bindings hand back a new
+        // RtpSender wrapper object on each access, so reference equality against the
+        // addTrack() result never holds). That silently no-opped every attempt to touch
+        // the transceiver, including this device's real problem: as SEND_RECV, with no
+        // decoder factory ever registered on this PeerConnectionFactory (this app never
+        // decodes incoming video), the receive side of the negotiation has no codec
+        // capability at all, which corrupted the whole video m-line down to
+        // "m=video 0 ... 0" regardless of which encoder codecs were available. Using
+        // addTransceiver() instead both returns the real transceiver directly (no lookup
+        // needed) and lets the direction be set to SEND_ONLY from the start.
+        val transceiver = pc.addTransceiver(
+            track,
+            RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY, listOf("dshare_stream"))
+        )
+        val sender = transceiver.sender
+        android.util.Log.i("DShareSender", "transceiver direction=${transceiver.direction}")
+
+        val capsCheck = factory.getRtpSenderCapabilities(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO)
+        android.util.Log.i(
+            "DShareSender",
+            "RtpSenderCapabilities(video): " +
+                (capsCheck?.codecs?.joinToString { "${it.name}(pt=${it.preferredPayloadType},mime=${it.mimeType})" } ?: "null")
+        )
+        android.util.Log.i("DShareSender", "track state=${track.state()} enabled=${track.enabled()} id=${track.id()}")
 
         // A previous attempt here called transceiver.setCodecPreferences() with the raw
         // capability list from getRtpSenderCapabilities() to force H.264 first. On at
@@ -153,12 +195,11 @@ class WebRtcSender(
         // CHECKING, matching the "stuck on connecting" reports. DefaultVideoEncoderFactory
         // already prefers a hardware-backed encoder among whatever codec actually gets
         // negotiated, so default negotiation is used instead of hand-picking a codec list.
-        val params = sender.getParameters()
-        if (params.encodings.isNotEmpty()) {
-            params.encodings[0].maxBitrateBps = 12_000_000
-        }
-        params.degradationPreference = RtpParameters.DegradationPreference.BALANCED
-        sender.setParameters(params)
+        //
+        // Also temporarily removed: sender.setParameters() for bitrate/degradation
+        // preference, called here before any SDP has ever been negotiated (the sender
+        // has zero RtpEncodingParameters at this point). Testing whether that pre-offer
+        // setParameters() call is what's corrupting the generated offer.
 
         pc.createOffer(object : SdpObserverAdapter() {
             override fun onCreateSuccess(desc: SessionDescription) {

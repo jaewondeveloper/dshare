@@ -28,7 +28,15 @@
   resizeCanvas();
   initStars();
 
+  // Runs via requestAnimationFrame for as long as starsAnimating stays true. Left
+  // running unconditionally for the whole page lifetime, this competed on the main
+  // thread with getDisplayMedia capture/encode for the entire duration of a share -
+  // pauseStars()/resumeStars() below stop it once the video is actually live, mirroring
+  // the native Android receiver's starfield.pauseAnimation() during real streaming.
+  let starsAnimating = true;
+
   function drawStars() {
+    if (!starsAnimating) return;
     const w = canvas.width, h = canvas.height;
     const cx = w / 2, cy = h / 2;
     ctx.clearRect(0, 0, w, h);
@@ -50,6 +58,16 @@
     requestAnimationFrame(drawStars);
   }
   requestAnimationFrame(drawStars);
+
+  function pauseStars() {
+    starsAnimating = false;
+  }
+
+  function resumeStars() {
+    if (starsAnimating) return;
+    starsAnimating = true;
+    requestAnimationFrame(drawStars);
+  }
 
   // ---------------- signaling / sharing ----------------
   const joinCard = document.getElementById('joinCard');
@@ -127,6 +145,7 @@
       case 'bye':
         cleanupCall();
         showOnly(shareCard);
+        resumeStars();
         break;
     }
   }
@@ -270,7 +289,11 @@
     void checkCircle.offsetWidth;
     checkCircle.style.animation = '';
     showOnly(successOverlay);
-    setTimeout(() => showOnly(liveOverlay), 150);
+    setTimeout(() => {
+      showOnly(liveOverlay);
+      // Fully live now - stop competing with capture/encode for main-thread time.
+      pauseStars();
+    }, 150);
   }
 
   function cleanupCall() {
@@ -284,6 +307,7 @@
       ws.send(JSON.stringify({ type: 'stop' }));
     }
     showOnly(shareCard);
+    resumeStars();
   }
 
   btnShare.addEventListener('click', startShare);
