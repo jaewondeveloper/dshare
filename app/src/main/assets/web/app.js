@@ -88,6 +88,12 @@
   let pc = null;
   let localStream = null;
   let joinTimeoutId = null;
+  let disconnectTimeoutId = null;
+  // 'disconnected' is very often a transient Wi-Fi blip (roaming between APs, a missed
+  // STUN keepalive) that ICE recovers from on its own within a second or two - treating
+  // it as fatal immediately tore the whole share down on every brief hiccup, which reads
+  // as "shares fine for a bit, then keeps disconnecting" on an ordinary home network.
+  const DISCONNECT_GRACE_MS = 6000;
 
   function showOnly(el) {
     [joinCard, shareCard, connectingOverlay, successOverlay, liveOverlay].forEach((e) => {
@@ -265,8 +271,19 @@
       pc.onconnectionstatechange = () => {
         if (!pc) return;
         if (pc.connectionState === 'connected') {
+          clearTimeout(disconnectTimeoutId);
+          disconnectTimeoutId = null;
           onConnected();
-        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+        } else if (pc.connectionState === 'disconnected') {
+          // Give it a chance to recover before tearing the share down.
+          clearTimeout(disconnectTimeoutId);
+          disconnectTimeoutId = setTimeout(() => {
+            disconnectTimeoutId = null;
+            stopShare();
+          }, DISCONNECT_GRACE_MS);
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          clearTimeout(disconnectTimeoutId);
+          disconnectTimeoutId = null;
           stopShare();
         }
       };
@@ -297,6 +314,8 @@
   }
 
   function cleanupCall() {
+    clearTimeout(disconnectTimeoutId);
+    disconnectTimeoutId = null;
     if (pc) { pc.close(); pc = null; }
     if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
   }

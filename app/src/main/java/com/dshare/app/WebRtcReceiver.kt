@@ -2,6 +2,8 @@ package com.dshare.app
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.os.Handler
+import android.os.Looper
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
@@ -29,10 +31,23 @@ class WebRtcReceiver(
         fun onConnectionClosed()
     }
 
+    companion object {
+        // PeerConnectionState.DISCONNECTED is often transient - a brief Wi-Fi hiccup,
+        // roaming between APs, a missed STUN keepalive - and ICE frequently recovers to
+        // CONNECTED again on its own within a second or two without any action needed.
+        // Treating it as fatal immediately (like the previous code did, lumping it in
+        // with FAILED/CLOSED) tore the whole session down on every brief blip, which is
+        // exactly what "shares fine for a bit, then keeps disconnecting" looks like on
+        // an ordinary home Wi-Fi network. Give it this long to recover before giving up.
+        private const val DISCONNECT_GRACE_MS = 6000L
+    }
+
     private val eglBase: EglBase = EglBase.create()
     private val factory: PeerConnectionFactory
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var peerConnection: PeerConnection? = null
     private var attachedTrack: VideoTrack? = null
+    private var disconnectTimeoutRunnable: Runnable? = null
 
     // onTrack and onAddStream can both fire for the same track (Unified Plan still
     // raises the legacy onAddStream for compatibility), and renegotiation can raise
@@ -113,16 +128,36 @@ class WebRtcReceiver(
 
             override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
                 android.util.Log.i("DShare", "PeerConnectionState -> $newState")
-                if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
-                    if (!connectedNotified) {
-                        connectedNotified = true
-                        callbacks.onRemoteConnected()
+                when (newState) {
+                    PeerConnection.PeerConnectionState.CONNECTED -> {
+                        // Recovered from a transient DISCONNECTED (or this is the first
+                        // real connect) - either way, any pending grace-period teardown
+                        // is now stale.
+                        disconnectTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                        disconnectTimeoutRunnable = null
+                        if (!connectedNotified) {
+                            connectedNotified = true
+                            callbacks.onRemoteConnected()
+                        }
                     }
-                } else if (newState == PeerConnection.PeerConnectionState.CLOSED ||
-                    newState == PeerConnection.PeerConnectionState.FAILED ||
-                    newState == PeerConnection.PeerConnectionState.DISCONNECTED
-                ) {
-                    callbacks.onConnectionClosed()
+                    PeerConnection.PeerConnectionState.DISCONNECTED -> {
+                        // Don't tear down immediately - give ICE a chance to recover on
+                        // its own, which it very often does within a second or two.
+                        disconnectTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                        val runnable = Runnable {
+                            android.util.Log.i("DShare", "DISCONNECTED did not recover within grace period, closing")
+                            callbacks.onConnectionClosed()
+                        }
+                        disconnectTimeoutRunnable = runnable
+                        mainHandler.postDelayed(runnable, DISCONNECT_GRACE_MS)
+                    }
+                    PeerConnection.PeerConnectionState.CLOSED,
+                    PeerConnection.PeerConnectionState.FAILED -> {
+                        disconnectTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                        disconnectTimeoutRunnable = null
+                        callbacks.onConnectionClosed()
+                    }
+                    else -> {}
                 }
             }
 
@@ -191,6 +226,8 @@ class WebRtcReceiver(
     }
 
     fun close() {
+        disconnectTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        disconnectTimeoutRunnable = null
         attachedTrack?.removeSink(renderer)
         attachedTrack = null
         peerConnection?.close()
