@@ -230,17 +230,26 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
      *  keeps working across app restarts); falls back to a fresh ephemeral port if
      *  that one is no longer available. */
     private fun startHttpsServerWithFallback(ip: String, preferredPort: Int, savedCode: String?): LocalShareServer {
+        // NanoHTTPD's start(timeout, ...) sets SO_TIMEOUT on every accepted socket -
+        // including the long-lived WebSocket signaling connection. Once a share is live,
+        // that socket can legitimately sit idle for the entire session (no new
+        // join/offer/ice/stop messages needed - WebRTC's own PeerConnection carries the
+        // actual media independently). A short timeout here was firing mid-share as a
+        // plain SocketTimeoutException, landing in SignalingSocket.onException() and
+        // getting misread as the client disconnecting - tearing down a perfectly healthy
+        // video stream. 0 disables the read timeout entirely (this is a small LAN-only
+        // helper server, not something exposed to untrusted/abandoned-connection risk).
         if (preferredPort != 0) {
             try {
                 val srv = LocalShareServer(applicationContext, ip, this, preferredPort, savedCode)
-                srv.start(30_000, false)
+                srv.start(0, false)
                 return srv
             } catch (e: Exception) {
                 android.util.Log.i("DShare", "Preferred HTTPS port $preferredPort unavailable, falling back: ${e.message}")
             }
         }
         val srv = LocalShareServer(applicationContext, ip, this, 0, savedCode)
-        srv.start(30_000, false)
+        srv.start(0, false)
         return srv
     }
 
