@@ -29,10 +29,23 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   h1 { font-size: 19px; font-weight: 600; margin: 0 0 8px; }
   p { font-size: 14px; line-height: 1.6; color: #9aa3b8; margin: 0 0 4px; }
-  .manual {
-    margin-top: 28px; display: none;
+
+  .section { display: none; margin-top: 28px; text-align: left; }
+  .section.show { display: block; }
+
+  .device-list { margin-bottom: 12px; }
+  .device-item {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    background: #171a25; border: 1px solid #2a2f3f; border-radius: 14px;
+    padding: 14px; margin-bottom: 10px; cursor: pointer; text-align: left;
+    color: #eef1f8; font-size: 15px; font-weight: 600;
+    transition: transform 0.15s ease, border-color 0.15s ease;
   }
-  .manual.show { display: block; }
+  .device-item:active { transform: scale(0.98); }
+  .device-item:hover { border-color: #3d6dfb; }
+  .device-dot { width: 9px; height: 9px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
+  .device-sub { display: block; font-size: 12px; font-weight: 400; color: #9aa3b8; margin-top: 2px; }
+
   input {
     width: 100%; box-sizing: border-box;
     background: #171a25; border: 1px solid #2a2f3f; color: #eef1f8;
@@ -60,7 +73,12 @@
     <h1 id="statusTitle">같은 Wi-Fi의 DShare 기기를 찾는 중…</h1>
     <p id="statusSub">몇 초 정도 걸릴 수 있어요.</p>
 
-    <div class="manual" id="manualBlock">
+    <div class="section" id="pickerBlock">
+      <div class="device-list" id="deviceList"></div>
+      <button class="retry" id="btnRetryFromPicker">다시 찾기</button>
+    </div>
+
+    <div class="section" id="manualBlock">
       <input id="manualCode" inputmode="numeric" maxlength="6" placeholder="6자리 코드 (선택)" autocomplete="off" />
       <button id="btnManual">주소 직접 입력하기</button>
       <button class="retry" id="btnRetry">다시 찾기</button>
@@ -71,23 +89,30 @@
 (function () {
   var DISCOVERY_PORT = 47990;
   var STORAGE_KEY = 'dshare_last_address';
-  var PER_REQUEST_TIMEOUT_MS = 900;
-  var TOTAL_TIMEOUT_MS = 7000;
+  var PER_REQUEST_TIMEOUT_MS = 400;
+  var TOTAL_TIMEOUT_MS = 12000;
+  // Once the first device answers, wait this much longer before finalizing - long
+  // enough to catch a second device on the same network replying moments later, short
+  // enough that the common single-device case doesn't feel sluggish.
+  var GRACE_AFTER_FIRST_HIT_MS = 1200;
+  var CONCURRENCY = 200;
 
   var spinner = document.getElementById('spinner');
   var statusTitle = document.getElementById('statusTitle');
   var statusSub = document.getElementById('statusSub');
+  var pickerBlock = document.getElementById('pickerBlock');
+  var deviceList = document.getElementById('deviceList');
   var manualBlock = document.getElementById('manualBlock');
   var manualCode = document.getElementById('manualCode');
   var btnManual = document.getElementById('btnManual');
   var btnRetry = document.getElementById('btnRetry');
+  var btnRetryFromPicker = document.getElementById('btnRetryFromPicker');
 
   function probe(ip) {
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, PER_REQUEST_TIMEOUT_MS);
     return fetch('http://' + ip + ':' + DISCOVERY_PORT + '/', { signal: controller.signal, cache: 'no-store' })
       .then(function (res) {
-        clearTimeout(timer);
         if (!res.ok) throw new Error('not ready');
         return res.json();
       })
@@ -95,10 +120,7 @@
         if (!data || data.app !== 'dshare' || !data.ready || !data.url) throw new Error('not dshare');
         return data;
       })
-      .catch(function (err) {
-        clearTimeout(timer);
-        throw err;
-      });
+      .finally(function () { clearTimeout(timer); });
   }
 
   // Best-effort local-IP hint via the classic WebRTC ICE candidate leak: creating a
@@ -106,7 +128,7 @@
   // letting us scan the exact right /24 first instead of guessing blind. Some browsers
   // (notably recent Chrome, for privacy) obfuscate this behind a random ".local" mDNS
   // hostname instead of a real IP - when that happens this quietly yields nothing and
-  // the common-subnet fallback list below is all we have left, which is fine.
+  // the common-subnet fallback list below is all that's left, which is fine.
   function guessLocalSubnet() {
     return new Promise(function (resolve) {
       try {
@@ -132,94 +154,163 @@
     });
   }
 
-  function subnetCandidates(prefix) {
-    var ips = [];
-    for (var i = 1; i <= 254; i++) ips.push(prefix + '.' + i);
-    return ips;
-  }
-
   // Common home-router / mobile-hotspot default subnets, tried only if the WebRTC hint
-  // above didn't pin down the real one.
+  // above didn't pin down the real one. Ordered by how often they actually show up.
   var FALLBACK_SUBNETS = [
-    '192.168.0', '192.168.1', '192.168.2', '192.168.4', '192.168.5',
-    '192.168.10', '192.168.35', '192.168.50', '192.168.100', '192.168.123',
-    '192.168.43', '172.20.10', '10.0.0', '10.0.1'
+    '192.168.1', '192.168.0', '192.168.43', '172.20.10', '192.168.4',
+    '192.168.50', '192.168.2', '192.168.35', '192.168.45', '192.168.10', '10.0.0'
   ];
 
-  function firstToRespond(ips) {
-    var probes = ips.map(function (ip) { return probe(ip); });
-    if (window.Promise.any) return Promise.any(probes);
-    // Fallback for older browsers without Promise.any.
-    return new Promise(function (resolve, reject) {
-      var pending = probes.length, failed = 0;
-      if (pending === 0) { reject(new Error('empty')); return; }
-      probes.forEach(function (p) {
-        p.then(resolve).catch(function () {
-          failed++;
-          if (failed === pending) reject(new Error('all failed'));
-        });
-      });
+  // Bounded-concurrency worker pool: pulls the next IP off the queue as each request
+  // settles, instead of firing every candidate at once (which blows past the browser's
+  // connection limit and fails everything with ERR_INSUFFICIENT_RESOURCES). Calls
+  // onFound for every successful hit - not just the first - and resolves once the whole
+  // queue is drained or isCancelled() starts returning true.
+  function scanIps(ips, onFound, isCancelled) {
+    return new Promise(function (resolveAll) {
+      var idx = 0;
+      var active = 0;
+
+      function maybeDone() {
+        if (active === 0 && (idx >= ips.length || isCancelled())) resolveAll();
+      }
+
+      function next() {
+        if (isCancelled() || idx >= ips.length) { maybeDone(); return; }
+        var ip = ips[idx++];
+        active++;
+        probe(ip)
+          .then(function (data) { if (!isCancelled()) onFound(ip, data); })
+          .catch(function () {})
+          .then(function () { active--; next(); });
+      }
+
+      if (ips.length === 0) { resolveAll(); return; }
+      for (var i = 0; i < CONCURRENCY; i++) next();
     });
+  }
+
+  function dedupeOrdered(list) {
+    var seen = {}, out = [];
+    for (var i = 0; i < list.length; i++) {
+      if (!seen[list[i]]) { seen[list[i]] = true; out.push(list[i]); }
+    }
+    return out;
+  }
+
+  // Interleaved round-robin (host .1 on every candidate subnet, then .2 on every
+  // subnet, and so on) instead of exhausting one subnet before starting the next. If
+  // the WebRTC hint didn't pin the exact subnet, this means a device sitting at a
+  // common/low host number is found quickly even if its subnet happens to be last in
+  // FALLBACK_SUBNETS, rather than only after every earlier subnet's full 254 addresses
+  // were already tried.
+  function buildIpQueue(cachedHost, guessedSubnet) {
+    var queue = [];
+    if (cachedHost) queue.push(cachedHost);
+    var subnets = guessedSubnet ? [guessedSubnet].concat(FALLBACK_SUBNETS) : FALLBACK_SUBNETS;
+    for (var host = 1; host <= 254; host++) {
+      for (var s = 0; s < subnets.length; s++) {
+        queue.push(subnets[s] + '.' + host);
+      }
+    }
+    return dedupeOrdered(queue);
   }
 
   function redirectTo(data) {
     try { localStorage.setItem(STORAGE_KEY, data.url); } catch (e) {}
     var target = data.url + (data.code ? ('?code=' + encodeURIComponent(data.code)) : '');
-    statusTitle.textContent = '찾았습니다! 이동하는 중…';
+    statusTitle.textContent = (data.name ? data.name + ' 기기로' : '') + ' 이동하는 중…';
     statusSub.textContent = target;
     location.href = target;
   }
 
   function showManualFallback() {
     spinner.classList.add('hidden');
+    pickerBlock.classList.remove('show');
     statusTitle.textContent = '기기를 자동으로 찾지 못했습니다';
     statusSub.textContent = '같은 Wi-Fi에 연결되어 있는지 확인하거나, 주소를 직접 입력해주세요.';
     manualBlock.classList.add('show');
   }
 
+  function showPicker(devices) {
+    spinner.classList.add('hidden');
+    manualBlock.classList.remove('show');
+    statusTitle.textContent = devices.length + '개의 DShare 기기를 찾았습니다';
+    statusSub.textContent = '공유받을 기기를 선택하세요.';
+    deviceList.innerHTML = '';
+    devices.forEach(function (data) {
+      var btn = document.createElement('button');
+      btn.className = 'device-item';
+      btn.innerHTML =
+        '<span class="device-dot"></span>' +
+        '<span>' + (data.name ? escapeHtml(data.name) : 'DShare 기기') +
+        '<span class="device-sub">' + escapeHtml(data.url) + '</span></span>';
+      btn.addEventListener('click', function () { redirectTo(data); });
+      deviceList.appendChild(btn);
+    });
+    pickerBlock.classList.add('show');
+  }
+
+  function escapeHtml(s) {
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
   function startSearch() {
     spinner.classList.remove('hidden');
+    pickerBlock.classList.remove('show');
     manualBlock.classList.remove('show');
     statusTitle.textContent = '같은 Wi-Fi의 DShare 기기를 찾는 중…';
     statusSub.textContent = '몇 초 정도 걸릴 수 있어요.';
 
     var cached = null;
     try { cached = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+    var cachedHost = null;
+    if (cached) { try { cachedHost = new URL(cached).hostname; } catch (e) {} }
 
-    var attempts = [];
-    if (cached) {
-      // Re-probe the remembered device directly rather than trusting the stored URL
-      // blindly - it may be on a different network now, or the app may have restarted
-      // with a different port since.
-      try {
-        var cachedHost = new URL(cached).hostname;
-        attempts.push(probe(cachedHost));
-      } catch (e) {}
+    var found = [];
+    var seenUrls = {};
+    var finalized = false;
+    var cancelled = false;
+    var overallTimer = null;
+    var graceTimer = null;
+
+    function isCancelled() { return cancelled; }
+
+    function finalize() {
+      if (finalized) return;
+      finalized = true;
+      cancelled = true;
+      clearTimeout(overallTimer);
+      clearTimeout(graceTimer);
+      if (found.length === 0) showManualFallback();
+      else if (found.length === 1) redirectTo(found[0]);
+      else showPicker(found);
     }
 
-    var timedOut = false;
-    var overallTimer = setTimeout(function () {
-      timedOut = true;
-      showManualFallback();
-    }, TOTAL_TIMEOUT_MS);
+    function onFound(ip, data) {
+      if (seenUrls[data.url]) return;
+      seenUrls[data.url] = true;
+      found.push(data);
+      if (!graceTimer) graceTimer = setTimeout(finalize, GRACE_AFTER_FIRST_HIT_MS);
+    }
 
-    function settle(data) {
-      if (timedOut) return; // user already moved on to manual entry
-      clearTimeout(overallTimer);
-      redirectTo(data);
+    overallTimer = setTimeout(finalize, TOTAL_TIMEOUT_MS);
+
+    // Fire the remembered address immediately, in parallel with the (up to ~1.2s)
+    // WebRTC subnet guess below - the common repeat-visit case shouldn't have to wait
+    // on that before even trying the one address most likely to just work.
+    if (cachedHost) {
+      probe(cachedHost).then(function (data) { if (!isCancelled()) onFound(cachedHost, data); }).catch(function () {});
     }
 
     guessLocalSubnet().then(function (subnet) {
-      if (timedOut) return;
-      var candidateSubnets = subnet ? [subnet] : FALLBACK_SUBNETS;
-      candidateSubnets.forEach(function (prefix) {
-        attempts.push.apply(attempts, subnetCandidates(prefix).map(probe));
-      });
-      firstToRespond(attempts).then(settle).catch(function () {
-        if (!timedOut) {
-          clearTimeout(overallTimer);
-          showManualFallback();
-        }
+      if (finalized) return;
+      var queue = buildIpQueue(null, subnet);
+      scanIps(queue, onFound, isCancelled).then(function () {
+        // Whole queue tried with nothing outstanding - no need to keep waiting.
+        if (!finalized) finalize();
       });
     });
   }
@@ -234,6 +325,7 @@
   });
 
   btnRetry.addEventListener('click', startSearch);
+  btnRetryFromPicker.addEventListener('click', startSearch);
 
   startSearch();
 })();

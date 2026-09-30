@@ -17,7 +17,8 @@ import org.json.JSONObject
  */
 class DiscoveryServer(
     private val redirectUrlProvider: () -> String?,
-    private val pairingCodeProvider: () -> String?
+    private val pairingCodeProvider: () -> String?,
+    private val deviceNameProvider: () -> String?
 ) : NanoHTTPD(PORT) {
 
     companion object {
@@ -38,6 +39,7 @@ class DiscoveryServer(
                 .put("ready", true)
                 .put("url", url)
                 .put("code", pairingCodeProvider())
+                .put("name", deviceNameProvider())
             newFixedLengthResponse(Response.Status.OK, "application/json", json.toString())
         }
         // The probing page runs on a different origin (the hosted landing page), and

@@ -215,7 +215,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
                 // fixed port can collide with something else already using it on this
                 // device - non-fatal, QR/manual entry keep working regardless.
                 try {
-                    val discovery = DiscoveryServer({ addressUrl }, { server?.pairingCode })
+                    val discovery = DiscoveryServer({ addressUrl }, { server?.pairingCode }, { deviceName })
                     discovery.start(0, false)
                     discoveryServer = discovery
                     android.util.Log.i("DShare", "startServerAsync: discovery server started on port ${DiscoveryServer.PORT}")
