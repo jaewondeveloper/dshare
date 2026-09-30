@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>DShare</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0b0d14;
+    color: #eef1f8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .wrap { max-width: 360px; width: 100%; text-align: center; }
+  .spinner {
+    width: 44px; height: 44px; margin: 0 auto 24px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.15);
+    border-top-color: #6ea8ff;
+    animation: spin 0.9s linear infinite;
+  }
+  .spinner.hidden { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 8px; }
+  p { font-size: 14px; line-height: 1.6; color: #9aa3b8; margin: 0 0 4px; }
+  .manual {
+    margin-top: 28px; display: none;
+  }
+  .manual.show { display: block; }
+  input {
+    width: 100%; box-sizing: border-box;
+    background: #171a25; border: 1px solid #2a2f3f; color: #eef1f8;
+    border-radius: 12px; padding: 13px 14px; font-size: 15px;
+    text-align: center; letter-spacing: 2px;
+    margin-bottom: 10px;
+  }
+  input::placeholder { color: #565d70; letter-spacing: normal; }
+  button {
+    width: 100%; border: none; border-radius: 12px; padding: 13px 14px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    background: #3d6dfb; color: #fff;
+    transition: transform 0.15s ease;
+  }
+  button:active { transform: scale(0.97); }
+  .retry {
+    background: transparent; color: #6ea8ff; margin-top: 10px;
+    font-size: 13px; font-weight: 500; padding: 8px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spinner" id="spinner"></div>
+    <h1 id="statusTitle">같은 Wi-Fi의 DShare 기기를 찾는 중…</h1>
+    <p id="statusSub">몇 초 정도 걸릴 수 있어요.</p>
+
+    <div class="manual" id="manualBlock">
+      <input id="manualCode" inputmode="numeric" maxlength="6" placeholder="6자리 코드 (선택)" autocomplete="off" />
+      <button id="btnManual">주소 직접 입력하기</button>
+      <button class="retry" id="btnRetry">다시 찾기</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var DISCOVERY_PORT = 47990;
+  var STORAGE_KEY = 'dshare_last_address';
+  var PER_REQUEST_TIMEOUT_MS = 900;
+  var TOTAL_TIMEOUT_MS = 7000;
+
+  var spinner = document.getElementById('spinner');
+  var statusTitle = document.getElementById('statusTitle');
+  var statusSub = document.getElementById('statusSub');
+  var manualBlock = document.getElementById('manualBlock');
+  var manualCode = document.getElementById('manualCode');
+  var btnManual = document.getElementById('btnManual');
+  var btnRetry = document.getElementById('btnRetry');
+
+  function probe(ip) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, PER_REQUEST_TIMEOUT_MS);
+    return fetch('http://' + ip + ':' + DISCOVERY_PORT + '/', { signal: controller.signal, cache: 'no-store' })
+      .then(function (res) {
+        clearTimeout(timer);
+        if (!res.ok) throw new Error('not ready');
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data || data.app !== 'dshare' || !data.ready || !data.url) throw new Error('not dshare');
+        return data;
+      })
+      .catch(function (err) {
+        clearTimeout(timer);
+        throw err;
+      });
+  }
+
+  // Best-effort local-IP hint via the classic WebRTC ICE candidate leak: creating a
+  // PeerConnection and reading host candidates often reveals this browser's own LAN IP,
+  // letting us scan the exact right /24 first instead of guessing blind. Some browsers
+  // (notably recent Chrome, for privacy) obfuscate this behind a random ".local" mDNS
+  // hostname instead of a real IP - when that happens this quietly yields nothing and
+  // the common-subnet fallback list below is all we have left, which is fine.
+  function guessLocalSubnet() {
+    return new Promise(function (resolve) {
+      try {
+        var pc = new RTCPeerConnection({ iceServers: [] });
+        var done = false;
+        var finish = function (subnet) {
+          if (done) return;
+          done = true;
+          try { pc.close(); } catch (e) {}
+          resolve(subnet);
+        };
+        pc.createDataChannel('');
+        pc.onicecandidate = function (evt) {
+          if (!evt.candidate) { finish(null); return; }
+          var match = /(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}/.exec(evt.candidate.candidate);
+          if (match) finish(match[1]);
+        };
+        pc.createOffer().then(function (offer) { return pc.setLocalDescription(offer); }).catch(function () { finish(null); });
+        setTimeout(function () { finish(null); }, 1200);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
+  function subnetCandidates(prefix) {
+    var ips = [];
+    for (var i = 1; i <= 254; i++) ips.push(prefix + '.' + i);
+    return ips;
+  }
+
+  // Common home-router / mobile-hotspot default subnets, tried only if the WebRTC hint
+  // above didn't pin down the real one.
+  var FALLBACK_SUBNETS = [
+    '192.168.0', '192.168.1', '192.168.2', '192.168.4', '192.168.5',
+    '192.168.10', '192.168.35', '192.168.50', '192.168.100', '192.168.123',
+    '192.168.43', '172.20.10', '10.0.0', '10.0.1'
+  ];
+
+  function firstToRespond(ips) {
+    var probes = ips.map(function (ip) { return probe(ip); });
+    if (window.Promise.any) return Promise.any(probes);
+    // Fallback for older browsers without Promise.any.
+    return new Promise(function (resolve, reject) {
+      var pending = probes.length, failed = 0;
+      if (pending === 0) { reject(new Error('empty')); return; }
+      probes.forEach(function (p) {
+        p.then(resolve).catch(function () {
+          failed++;
+          if (failed === pending) reject(new Error('all failed'));
+        });
+      });
+    });
+  }
+
+  function redirectTo(data) {
+    try { localStorage.setItem(STORAGE_KEY, data.url); } catch (e) {}
+    var target = data.url + (data.code ? ('?code=' + encodeURIComponent(data.code)) : '');
+    statusTitle.textContent = '찾았습니다! 이동하는 중…';
+    statusSub.textContent = target;
+    location.href = target;
+  }
+
+  function showManualFallback() {
+    spinner.classList.add('hidden');
+    statusTitle.textContent = '기기를 자동으로 찾지 못했습니다';
+    statusSub.textContent = '같은 Wi-Fi에 연결되어 있는지 확인하거나, 주소를 직접 입력해주세요.';
+    manualBlock.classList.add('show');
+  }
+
+  function startSearch() {
+    spinner.classList.remove('hidden');
+    manualBlock.classList.remove('show');
+    statusTitle.textContent = '같은 Wi-Fi의 DShare 기기를 찾는 중…';
+    statusSub.textContent = '몇 초 정도 걸릴 수 있어요.';
+
+    var cached = null;
+    try { cached = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+
+    var attempts = [];
+    if (cached) {
+      // Re-probe the remembered device directly rather than trusting the stored URL
+      // blindly - it may be on a different network now, or the app may have restarted
+      // with a different port since.
+      try {
+        var cachedHost = new URL(cached).hostname;
+        attempts.push(probe(cachedHost));
+      } catch (e) {}
+    }
+
+    var timedOut = false;
+    var overallTimer = setTimeout(function () {
+      timedOut = true;
+      showManualFallback();
+    }, TOTAL_TIMEOUT_MS);
+
+    function settle(data) {
+      if (timedOut) return; // user already moved on to manual entry
+      clearTimeout(overallTimer);
+      redirectTo(data);
+    }
+
+    guessLocalSubnet().then(function (subnet) {
+      if (timedOut) return;
+      var candidateSubnets = subnet ? [subnet] : FALLBACK_SUBNETS;
+      candidateSubnets.forEach(function (prefix) {
+        attempts.push.apply(attempts, subnetCandidates(prefix).map(probe));
+      });
+      firstToRespond(attempts).then(settle).catch(function () {
+        if (!timedOut) {
+          clearTimeout(overallTimer);
+          showManualFallback();
+        }
+      });
+    });
+  }
+
+  btnManual.addEventListener('click', function () {
+    var code = manualCode.value.trim();
+    var addr = prompt('DShare 기기에 표시된 주소를 입력하세요 (예: http://192.168.0.10:8080)');
+    if (!addr) return;
+    if (!/^https?:\/\//.test(addr)) addr = 'http://' + addr;
+    try { localStorage.setItem(STORAGE_KEY, addr); } catch (e) {}
+    location.href = addr + (code ? ('?code=' + encodeURIComponent(code)) : '');
+  });
+
+  btnRetry.addEventListener('click', startSearch);
+
+  startSearch();
+})();
+</script>
+</body>
+</html>

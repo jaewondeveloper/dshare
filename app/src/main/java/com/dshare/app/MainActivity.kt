@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
     private val mainHandler = Handler(Looper.getMainLooper())
     private var server: LocalShareServer? = null
     private var redirectServer: RedirectServer? = null
+    private var discoveryServer: DiscoveryServer? = null
     private var webRtc: WebRtcReceiver? = null
     private var addressUrl: String = ""
     private var clientJoined = false
@@ -208,6 +209,20 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
 
                 val url = "http://$ip:${redirect.listeningPort}"
                 addressUrl = url
+
+                // Best-effort: lets an externally-hosted landing page (dshare.com) find
+                // this device on the LAN without knowing its dynamic port in advance. A
+                // fixed port can collide with something else already using it on this
+                // device - non-fatal, QR/manual entry keep working regardless.
+                try {
+                    val discovery = DiscoveryServer({ addressUrl }, { server?.pairingCode })
+                    discovery.start(0, false)
+                    discoveryServer = discovery
+                    android.util.Log.i("DShare", "startServerAsync: discovery server started on port ${DiscoveryServer.PORT}")
+                } catch (e: Exception) {
+                    android.util.Log.i("DShare", "Discovery server unavailable (port ${DiscoveryServer.PORT} busy?): ${e.message}")
+                }
+
                 mainHandler.post {
                     addressText.text = url
                     codeText.text = srv.pairingCode
@@ -455,6 +470,7 @@ class MainActivity : AppCompatActivity(), LocalShareServer.Listener, WebRtcRecei
         webRtc?.release()
         server?.stop()
         redirectServer?.stop()
+        discoveryServer?.stop()
         stopService(Intent(this, KeepAliveService::class.java))
     }
 }
